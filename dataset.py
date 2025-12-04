@@ -105,7 +105,6 @@ class Adapter:
             "bbox_mode": self._box_mode,
             "category_id": self.id_map[ann["category_id"]],
             "segmentation": final_seg,
-            "keypoints": [],
         }
 
     def __iter__(self) -> Iterator[dict]:
