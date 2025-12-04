@@ -8,6 +8,12 @@ uv sync
 uv pip install 'git+https://github.com/facebookresearch/detectron2.git' --no-build-isolation
 ```
 
+Training
+
+```shell
+uv run train.py --data-path --out-dir --epochs 100 --batch 2
+`````
+
 Inference test
 
 ```shell
