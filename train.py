@@ -14,9 +14,11 @@ app = Typer()
 
 
 @app.command()
-def train(path: str):
+def train(path: str, out: str):
     annotation_file = os.path.join(path, "train", "annotations", "train.json")
-    image_dir = os.path.join(path, "train", "images")
+    image_dir = os.path.join(path, "train", "images",
+)
+    os.makedirs(out, exist_ok=True)
 
     print(f"Loading annotations from {annotation_file}...")
     with open(annotation_file, "r") as f:
@@ -55,7 +57,7 @@ def train(path: str):
 
     cfg.MODEL.ROI_HEADS.NUM_CLASSES = len(adapter.class_names)
 
-    cfg.OUTPUT_DIR = os.path.join(os.getcwd(), "output")
+    cfg.OUTPUT_DIR = out
     os.makedirs(cfg.OUTPUT_DIR, exist_ok=True)
 
     trainer = DefaultTrainer(cfg)
