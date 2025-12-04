@@ -55,7 +55,7 @@ def train(path: str):
 
     cfg.MODEL.ROI_HEADS.NUM_CLASSES = len(adapter.class_names)
 
-    cfg.OUTPUT_DIR = os.path.join(path, "output")
+    cfg.OUTPUT_DIR = os.path.join(os.getcwd(), "output")
     os.makedirs(cfg.OUTPUT_DIR, exist_ok=True)
 
     trainer = DefaultTrainer(cfg)
