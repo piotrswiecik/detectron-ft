@@ -11,7 +11,10 @@ if __name__ == "__main__":
     with open(path, "r") as f:
         labels = json.load(f)
 
-    dataset = Adapter(labels, "/Users/piotrswiecik/dev/ives/coronary/datasets/arcade/syntax/train/images")
+    dataset = Adapter(
+        labels,
+        "/Users/piotrswiecik/dev/ives/coronary/datasets/arcade/syntax/train/images",
+    )
 
     cv2.namedWindow("Detectron2 Visualization", cv2.WINDOW_NORMAL)
 
@@ -40,4 +43,3 @@ if __name__ == "__main__":
             break
 
     cv2.destroyAllWindows()
-

@@ -38,12 +38,26 @@ def test_single_data_point_conversion():
 
 
 def test_mixed_segmentation_formats():
-    adapter_flat = Adapter({"images": [], "annotations": [{"image_id": 1, "category_id": 1, "segmentation": [10, 10, 20, 20]}]})
+    adapter_flat = Adapter(
+        {
+            "images": [],
+            "annotations": [
+                {"image_id": 1, "category_id": 1, "segmentation": [10, 10, 20, 20]}
+            ],
+        }
+    )
     res_flat = adapter_flat._convert_annotation(adapter_flat._raw_anns[0])
     assert res_flat["bbox"] == [10, 10, 20, 20]
-    assert res_flat["segmentation"] == [[10, 10, 20, 20]] # Correctly wrapped
+    assert res_flat["segmentation"] == [[10, 10, 20, 20]]  # Correctly wrapped
 
-    adapter_nested = Adapter({"images": [], "annotations": [{"image_id": 1, "category_id": 1, "segmentation": [[10, 10, 20, 20]]}]})
+    adapter_nested = Adapter(
+        {
+            "images": [],
+            "annotations": [
+                {"image_id": 1, "category_id": 1, "segmentation": [[10, 10, 20, 20]]}
+            ],
+        }
+    )
     res_nested = adapter_nested._convert_annotation(adapter_nested._raw_anns[0])
     assert res_nested["bbox"] == [10, 10, 20, 20]
-    assert res_nested["segmentation"] == [[10, 10, 20, 20]] # Kept as is
+    assert res_nested["segmentation"] == [[10, 10, 20, 20]]  # Kept as is
