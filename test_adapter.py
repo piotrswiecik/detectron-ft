@@ -35,3 +35,15 @@ def test_single_data_point_conversion():
     assert isinstance(ann["segmentation"][0], list)
 
     assert ann["bbox"] == [380.0, 350.75, 390.0, 370.0]
+
+
+def test_mixed_segmentation_formats():
+    adapter_flat = Adapter({"images": [], "annotations": [{"image_id": 1, "category_id": 1, "segmentation": [10, 10, 20, 20]}]})
+    res_flat = adapter_flat._convert_annotation(adapter_flat._raw_anns[0])
+    assert res_flat["bbox"] == [10, 10, 20, 20]
+    assert res_flat["segmentation"] == [[10, 10, 20, 20]] # Correctly wrapped
+
+    adapter_nested = Adapter({"images": [], "annotations": [{"image_id": 1, "category_id": 1, "segmentation": [[10, 10, 20, 20]]}]})
+    res_nested = adapter_nested._convert_annotation(adapter_nested._raw_anns[0])
+    assert res_nested["bbox"] == [10, 10, 20, 20]
+    assert res_nested["segmentation"] == [[10, 10, 20, 20]] # Kept as is
