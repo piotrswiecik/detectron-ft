@@ -66,8 +66,13 @@ class MLFlowHook(HookBase):
         if self.trainer.iter % self.period == 0:
             storage = self.trainer.storage
             metrics = {}
-            for k, v in storage.latest().items():
-                metrics[k] = v.median(self.period)
+
+            latest_keys = storage.latest().keys()
+
+            for k in latest_keys:
+                if k in storage.histories():
+                    metrics[k] = storage.histories()[k].median(self.period)
+
             mlflow.log_metrics(metrics, step=self.trainer.iter)
 
     def after_train(self):
