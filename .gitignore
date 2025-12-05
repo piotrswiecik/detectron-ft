@@ -13,3 +13,6 @@ wheels/
 
 # Data and artifacts
 output
+
+.env
+!.env.dist
