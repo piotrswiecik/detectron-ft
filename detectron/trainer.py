@@ -133,7 +133,14 @@ class MLFlowHook(HookBase):
 
             for k in latest_keys:
                 if k in storage.histories():
-                    metrics[k] = storage.histories()[k].median(self.period)
+                    val = storage.histories()[k].median(self.period)
+                    if math.isfinite(val):
+                        metrics[k] = val
+                    else:
+                        metrics[k] = 0.0
+
+            if metrics:
+                mlflow.log_metrics(metrics, step=self.trainer.iter)
 
             mlflow.log_metrics(metrics, step=self.trainer.iter)
 
