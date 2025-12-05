@@ -1,7 +1,10 @@
 import copy
 import logging
+import math
 import os
 import json
+import time
+
 from detectron2.engine import DefaultTrainer
 from detectron2.evaluation import COCOEvaluator
 from detectron2.utils.logger import setup_logger
@@ -11,10 +14,12 @@ from detectron2.data import (
     MetadataCatalog,
     DatasetCatalog,
     build_detection_train_loader,
+    build_detection_test_loader,
 )
 from detectron2.data import detection_utils as utils
 from detectron2.data import transforms as T
 from detectron2.engine.hooks import HookBase
+import detectron2.utils.comm as comm
 import mlflow
 import torch
 from dotenv import load_dotenv
@@ -54,6 +59,63 @@ def custom_mapper(dataset_dict):
     return dataset_dict
 
 
+class EvalHook(HookBase):
+    def __init__(self, cfg, model):
+        self.cfg = cfg
+        self.model = model
+        self.period = cfg.TEST.EVAL_PERIOD
+        self.data_loader = build_detection_test_loader(
+            cfg,
+            cfg.DATASETS.TEST[0],
+            mapper=None,
+        )
+        self.log = logging.getLogger(__name__)
+
+    def _do_loss_eval(self):
+        total = len(self.data_loader)
+        num_warmup = min(5, total - 1)
+
+        start_time = time.perf_counter()
+        total_compute_time = 0
+        losses = []
+
+        for idx, inputs in enumerate(self.data_loader):
+            if idx == num_warmup:
+                start_time = time.perf_counter()
+                total_compute_time = 0
+
+            start_compute_time = time.perf_counter()
+            if torch.cuda.is_available():
+                torch.cuda.synchronize()
+
+            with torch.no_grad():
+                if self.model.training:
+                    loss_dict = self.model(inputs)
+                else:
+                    self.model.train()
+                    loss_dict = self.model(inputs)
+                    self.model.eval()
+
+            losses.append(sum(loss for loss in loss_dict.values()))
+
+            if torch.cuda.is_available():
+                torch.cuda.synchronize()
+            total_compute_time += time.perf_counter() - start_compute_time
+
+        mean_loss = torch.tensor(losses).mean().item()
+
+        self.trainer.storage.put_scalar("validation_loss", mean_loss)
+
+        self.log.info(f"Validation Loss: {mean_loss:.4f}")
+        comm.synchronize()
+
+    def after_step(self):
+        next_iter = self.trainer.iter + 1
+        is_final = next_iter == self.trainer.max_iter
+        if is_final or (self.period > 0 and next_iter % self.period == 0):
+            self._do_loss_eval()
+
+
 class MLFlowHook(HookBase):
     def __init__(self, cfg, period: int = 20):
         self.cfg = cfg
@@ -76,8 +138,23 @@ class MLFlowHook(HookBase):
             mlflow.log_metrics(metrics, step=self.trainer.iter)
 
     def after_train(self):
-        if self.trainer.iter + 1 >= self.trainer.max_iter:
-            mlflow.log_artifacts(self.cfg.OUTPUT_DIR, artifact_path="model_output")
+        if self.trainer.iter % self.period == 0:
+            storage = self.trainer.storage
+            metrics = {}
+
+            latest_keys = storage.latest().keys()
+            for k in latest_keys:
+                if k in storage.histories():
+                    val = storage.histories()[k].median(self.period)
+                    if math.isfinite(val):
+                        metrics[k] = val
+                    else:
+                        metrics[k] = 0.0
+                        print(
+                            f"WARNING: Metric {k} is {val} at iter {self.trainer.iter}"
+                        )
+            if metrics:
+                mlflow.log_metrics(metrics, step=self.trainer.iter)
 
     @staticmethod
     def _log_params_from_cfg(cfg):
@@ -165,12 +242,13 @@ class ArcadeOrchestrator:
             self.cfg.OUTPUT_DIR = self.model_output_dir
             os.makedirs(model_output_dir, exist_ok=True)
 
-    def train(self, epochs: int, batch: int = 2, base_lr: float = 0.001):
+    def train(self, epochs: int, batch: int = 2, base_lr: float = 0.00025):
         one_epoch_iters = self.num_train_images // batch
         max_iter = one_epoch_iters * epochs
 
         self.cfg.SOLVER.IMS_PER_BATCH = batch
         self.cfg.SOLVER.BASE_LR = base_lr
+        self.cfg.SOLVER.WARMUP_ITERS = 1000  # ramp up learning rate
         self.cfg.SOLVER.MAX_ITER = max_iter
         self.cfg.SOLVER.STEPS = (int(max_iter * 0.6), int(max_iter * 0.8))
         self.cfg.SOLVER.GAMMA = 0.1
