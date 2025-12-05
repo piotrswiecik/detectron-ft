@@ -118,15 +118,15 @@ class EvalHook(HookBase):
 
 
 class MLFlowHook(HookBase):
-    def __init__(self, cfg, period: int = 20):
+    def __init__(self, cfg, log_period: int = 100):
         self.cfg = cfg
-        self.period = period
+        self.log_period = log_period
 
     def before_train(self):
         self._log_params_from_cfg(self.cfg)
 
     def after_step(self):
-        if self.trainer.iter % self.period == 0:
+        if self.trainer.iter % self.log_period == 0:
             storage = self.trainer.storage
             metrics = {}
 
@@ -134,7 +134,7 @@ class MLFlowHook(HookBase):
 
             for k in latest_keys:
                 if k in storage.histories():
-                    val = storage.histories()[k].median(self.period)
+                    val = storage.histories()[k].median(self.log_period)
                     if math.isfinite(val):
                         metrics[k] = val
                     else:
