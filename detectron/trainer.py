@@ -172,7 +172,7 @@ class ArcadeOrchestrator:
         self.cfg.SOLVER.CHECKPOINT_PERIOD = one_epoch_iters * 5
         self.cfg.TEST.EVAL_PERIOD = one_epoch_iters * 5
 
-        experiment_name = os.getenv("MLFLOW_EXPERIMENT_NAME")
+        experiment_name = os.getenv("MLFLOW_EXPERIMENT")
         mlflow.set_tracking_uri(
             os.getenv("MLFLOW_TRACKING_URI")
         )
