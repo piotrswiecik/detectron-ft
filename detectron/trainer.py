@@ -60,9 +60,8 @@ def custom_mapper(dataset_dict):
 
 
 class EvalHook(HookBase):
-    def __init__(self, cfg, model):
+    def __init__(self, cfg):
         self.cfg = cfg
-        self.model = model
         self.period = cfg.TEST.EVAL_PERIOD
         self.data_loader = build_detection_test_loader(
             cfg,
@@ -79,6 +78,8 @@ class EvalHook(HookBase):
         total_compute_time = 0
         losses = []
 
+        model = self.trainer.model # type: ignore
+
         for idx, inputs in enumerate(self.data_loader):
             if idx == num_warmup:
                 start_time = time.perf_counter()
@@ -89,12 +90,12 @@ class EvalHook(HookBase):
                 torch.cuda.synchronize()
 
             with torch.no_grad():
-                if self.model.training:
-                    loss_dict = self.model(inputs)
+                if model.training:
+                    loss_dict = model(inputs)
                 else:
-                    self.model.train()
-                    loss_dict = self.model(inputs)
-                    self.model.eval()
+                    model.train()
+                    loss_dict = model(inputs)
+                    model.eval()
 
             losses.append(sum(loss for loss in loss_dict.values()))
 
@@ -145,23 +146,7 @@ class MLFlowHook(HookBase):
             mlflow.log_metrics(metrics, step=self.trainer.iter)
 
     def after_train(self):
-        if self.trainer.iter % self.period == 0:
-            storage = self.trainer.storage
-            metrics = {}
-
-            latest_keys = storage.latest().keys()
-            for k in latest_keys:
-                if k in storage.histories():
-                    val = storage.histories()[k].median(self.period)
-                    if math.isfinite(val):
-                        metrics[k] = val
-                    else:
-                        metrics[k] = 0.0
-                        print(
-                            f"WARNING: Metric {k} is {val} at iter {self.trainer.iter}"
-                        )
-            if metrics:
-                mlflow.log_metrics(metrics, step=self.trainer.iter)
+        self.after_step()
 
     @staticmethod
     def _log_params_from_cfg(cfg):
@@ -184,7 +169,7 @@ class ArcadeTrainer(DefaultTrainer):
 
     def build_hooks(self):
         hooks = super().build_hooks()
-
+        hooks.append(EvalHook(self.cfg))
         hooks.append(MLFlowHook(self.cfg))
         return hooks
 
@@ -260,7 +245,13 @@ class ArcadeOrchestrator:
         self.cfg.SOLVER.STEPS = (int(max_iter * 0.6), int(max_iter * 0.8))
         self.cfg.SOLVER.GAMMA = 0.1
         self.cfg.SOLVER.CHECKPOINT_PERIOD = one_epoch_iters * 5
+
         self.cfg.TEST.EVAL_PERIOD = one_epoch_iters * 5
+
+        self.cfg.SOLVER.CLIP_GRADIENTS.ENABLED = True
+        self.cfg.SOLVER.CLIP_GRADIENTS.CLIP_TYPE = "value"
+        self.cfg.SOLVER.CLIP_GRADIENTS.CLIP_VALUE = 1.0
+        self.cfg.SOLVER.CLIP_GRADIENTS.NORM_TYPE = 2.0
 
         experiment_name = os.getenv("MLFLOW_EXPERIMENT")
         mlflow.set_tracking_uri(
