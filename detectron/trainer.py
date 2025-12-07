@@ -209,10 +209,8 @@ class ArcadeOrchestrator:
                     f"Training data loaded: {self.num_train_images} images, classes: {self.class_names}"
                 )
 
-            stamp = str(uuid.uuid4())
-            d_name = f"arcade_{split}_{stamp}"
-            DatasetCatalog.register(d_name, lambda a=adapter: a.as_list())
-            MetadataCatalog.get(d_name).set(thing_classes=adapter.class_names)
+            DatasetCatalog.register(f"arcade_{split}", lambda a=adapter: a.as_list())
+            MetadataCatalog.get(f"arcade_{split}").set(thing_classes=adapter.class_names)
 
             if self.num_train_images == 0:
                 raise ValueError("No training images found")
@@ -224,7 +222,7 @@ class ArcadeOrchestrator:
                 )
             )
 
-            self.cfg.DATASETS.TRAIN = (d_name,)
+            self.cfg.DATASETS.TRAIN = ("arcade_train",)
             self.cfg.DATASETS.TEST = (
                 ("arcade_val",) if "arcade_val" in DatasetCatalog.list() else ()
             )

@@ -1,7 +1,7 @@
 """
 Module for single training run.
 """
-
+import json
 import os
 import datetime
 import typer
@@ -22,6 +22,8 @@ def run_training(
     batch: int = typer.Option(2, help="Batch size"),
     base_lr: float = typer.Option(0.001, help="Base learning rate"),
 ):
+    with open("params.json", "r") as pf:
+        params = json.load(pf)
     arcade_syntax_root = arcade_syntax_root or os.getenv("ARCADE_SYNTAX_ROOT")
     if arcade_syntax_root is None:
         typer.echo("ARCADE_SYNTAX_ROOT not set.")
@@ -32,7 +34,7 @@ def run_training(
     orchestrator = ArcadeOrchestrator(
         arcade_syntax_root, model_output_dir=output_path
     )
-    orchestrator.train(epochs, batch, base_lr)
+    orchestrator.train(epochs, batch, base_lr, params)
 
 
 if __name__ == "__main__":
