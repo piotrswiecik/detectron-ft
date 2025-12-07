@@ -20,7 +20,6 @@ def run_training(
     ),
     epochs: int = typer.Option(100, help="Number of epochs"),
     batch: int = typer.Option(2, help="Batch size"),
-    base_lr: float = typer.Option(0.001, help="Base learning rate"),
 ):
     with open("params.json", "r") as pf:
         params = json.load(pf)
@@ -34,7 +33,7 @@ def run_training(
     orchestrator = ArcadeOrchestrator(
         arcade_syntax_root, model_output_dir=output_path
     )
-    orchestrator.train(epochs, batch, base_lr, params)
+    orchestrator.train(epochs, batch, params["base_lr"], params)
 
 
 if __name__ == "__main__":
