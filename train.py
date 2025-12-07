@@ -27,8 +27,10 @@ def run_training(
         typer.echo("ARCADE_SYNTAX_ROOT not set.")
         raise typer.Exit(code=1)
     tstamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    output_path = os.path.join("results", f"training_{tstamp}")
+    os.makedirs(output_path, exist_ok=True)
     orchestrator = ArcadeOrchestrator(
-        arcade_syntax_root, model_output_dir=f"training_{tstamp}"
+        arcade_syntax_root, model_output_dir=output_path
     )
     orchestrator.train(epochs, batch, base_lr)
 

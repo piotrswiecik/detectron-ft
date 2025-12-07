@@ -1,9 +1,11 @@
 import copy
+import datetime
 import logging
 import math
 import os
 import json
 import time
+import uuid
 
 from detectron2.engine import DefaultTrainer
 from detectron2.evaluation import COCOEvaluator
@@ -182,8 +184,6 @@ class ArcadeOrchestrator:
         self.log = logging.getLogger(__name__ + ".ArcadeOrchestrator")
         self.model_output_dir = model_output_dir
 
-        os.makedirs(model_output_dir, exist_ok=True)
-
         self.class_names = []
         self.num_train_images = 0
         splits = ["train", "val"]
@@ -209,7 +209,8 @@ class ArcadeOrchestrator:
                     f"Training data loaded: {self.num_train_images} images, classes: {self.class_names}"
                 )
 
-            d_name = f"arcade_{split}"
+            stamp = str(uuid.uuid4())
+            d_name = f"arcade_{split}_{stamp}"
             DatasetCatalog.register(d_name, lambda a=adapter: a.as_list())
             MetadataCatalog.get(d_name).set(thing_classes=adapter.class_names)
 
@@ -237,7 +238,6 @@ class ArcadeOrchestrator:
             self.cfg.MODEL.ROI_HEADS.NUM_CLASSES = len(self.class_names)
 
             self.cfg.OUTPUT_DIR = self.model_output_dir
-            os.makedirs(model_output_dir, exist_ok=True)
 
     def train(
         self,

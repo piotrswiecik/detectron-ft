@@ -6,6 +6,7 @@ import os
 import datetime
 import typer
 import itertools
+import json
 from dotenv import load_dotenv
 
 from detectron.trainer import ArcadeOrchestrator
@@ -49,16 +50,24 @@ def run_grid(
     for params in param_combinations:
         tstamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         typer.echo(f"Training with params: {params} at {tstamp}")
-        orchestrator = ArcadeOrchestrator(
-            arcade_syntax_root, model_output_dir=f"training_{tstamp}"
-        )
-        lr = params[0]
+
+        output_path = os.path.join("results", f"training_{tstamp}")
+        os.makedirs(output_path, exist_ok=True)
+
         params_dict = {
+            "base_lr": params[0],
             "anchor_sizes": params[1],
             "anchor_ratios": params[2],
             "freeze_at": params[3],
         }
-        orchestrator.train(epochs, batch, lr, params_dict)
+
+        json.dump(params_dict, open(os.path.join(output_path, "params.json"), "w"))
+
+        orchestrator = ArcadeOrchestrator(
+            arcade_syntax_root, model_output_dir=f"training_{tstamp}"
+        )
+
+        # orchestrator.train(epochs, batch, params_dict["base_lr"], params_dict)
 
 
 if __name__ == "__main__":
