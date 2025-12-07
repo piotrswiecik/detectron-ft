@@ -78,7 +78,7 @@ class EvalHook(HookBase):
         total_compute_time = 0
         losses = []
 
-        model = self.trainer.model # type: ignore
+        model = self.trainer.model  # type: ignore
 
         for idx, inputs in enumerate(self.data_loader):
             if idx == num_warmup:
@@ -150,9 +150,12 @@ class MLFlowHook(HookBase):
 
     @staticmethod
     def _log_params_from_cfg(cfg):
-        params = {"SOLVER.BASE_LR": cfg.SOLVER.BASE_LR, "SOLVER.MAX_ITER": cfg.SOLVER.MAX_ITER,
-                  "MODEL.ROI_HEADS.BATCH_SIZE": cfg.MODEL.ROI_HEADS.BATCH_SIZE_PER_IMAGE,
-                  "DATASETS.TRAIN": str(cfg.DATASETS.TRAIN)}
+        params = {
+            "SOLVER.BASE_LR": cfg.SOLVER.BASE_LR,
+            "SOLVER.MAX_ITER": cfg.SOLVER.MAX_ITER,
+            "MODEL.ROI_HEADS.BATCH_SIZE": cfg.MODEL.ROI_HEADS.BATCH_SIZE_PER_IMAGE,
+            "DATASETS.TRAIN": str(cfg.DATASETS.TRAIN),
+        }
         mlflow.log_params(params)
 
 
@@ -186,7 +189,9 @@ class ArcadeOrchestrator:
         splits = ["train", "val"]
 
         for split in splits:
-            json_file = os.path.join(arcade_syntax_root, split, "annotations", f"{split}.json")
+            json_file = os.path.join(
+                arcade_syntax_root, split, "annotations", f"{split}.json"
+            )
             img_dir = os.path.join(arcade_syntax_root, split, "images")
 
             if not os.path.exists(json_file):
@@ -234,7 +239,15 @@ class ArcadeOrchestrator:
             self.cfg.OUTPUT_DIR = self.model_output_dir
             os.makedirs(model_output_dir, exist_ok=True)
 
-    def train(self, epochs: int, batch: int = 2, base_lr: float = 0.00025):
+    def train(
+        self,
+        epochs: int,
+        batch: int = 2,
+        base_lr: float = 0.00025,
+        hyperparameters: dict | None = None,
+    ):
+        hyperparameters = hyperparameters or {}
+
         one_epoch_iters = self.num_train_images // batch
         max_iter = one_epoch_iters * epochs
 
@@ -253,10 +266,29 @@ class ArcadeOrchestrator:
         self.cfg.SOLVER.CLIP_GRADIENTS.CLIP_VALUE = 1.0
         self.cfg.SOLVER.CLIP_GRADIENTS.NORM_TYPE = 2.0
 
+        # backbone freeze (0, 1, 2)
+        if "freeze_at" in hyperparameters and hyperparameters["freeze_at"] in [0, 1, 2]:
+            self.cfg.MODEL.BACKBONE.FREEZE_AT = hyperparameters["freeze_at"]
+
+        # anchor sizes
+        if "anchor_sizes" in hyperparameters:
+            sizes = hyperparameters["anchor_sizes"]
+            if len(sizes) != 5:
+                self.log.warning(
+                    f"Warning: FPN expects 5 anchor sizes, got {len(sizes)}. This might crash."
+                )
+            self.cfg.MODEL.ANCHOR_GENERATOR.SIZES = sizes
+
+        # anchor aspect ratios
+        if "anchor_ratios" in hyperparameters:
+            self.cfg.MODEL.ANCHOR_GENERATOR.ASPECT_RATIOS = hyperparameters["anchor_ratios"]
+
+        # roi head batch size
+        if "roi_batch_size" in hyperparameters:
+            self.cfg.MODEL.ROI_HEADS.BATCH_SIZE_PER_IMAGE = hyperparameters["roi_batch_size"]
+
         experiment_name = os.getenv("MLFLOW_EXPERIMENT")
-        mlflow.set_tracking_uri(
-            os.getenv("MLFLOW_TRACKING_URI")
-        )
+        mlflow.set_tracking_uri(os.getenv("MLFLOW_TRACKING_URI"))
         mlflow.set_experiment(experiment_name)
 
         with mlflow.start_run(run_name=f"run_epochs_{epochs}_batch_{batch}"):
@@ -265,7 +297,3 @@ class ArcadeOrchestrator:
 
             self.log.info(f"Starting training for {epochs} epochs")
             trainer.train()
-
-
-
-

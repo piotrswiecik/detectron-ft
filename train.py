@@ -15,17 +15,21 @@ load_dotenv()
 
 @app.command()
 def run_training(
-        arcade_syntax_root: str | None = typer.Option(None, help="Path to the root of the arcade-syntax dataset"),
-        epochs: int = typer.Option(100, help="Number of epochs"),
-        batch: int = typer.Option(2, help="Batch size"),
-        base_lr: float = typer.Option(0.001, help="Base learning rate")
+    arcade_syntax_root: str | None = typer.Option(
+        None, help="Path to the root of the arcade-syntax dataset"
+    ),
+    epochs: int = typer.Option(100, help="Number of epochs"),
+    batch: int = typer.Option(2, help="Batch size"),
+    base_lr: float = typer.Option(0.001, help="Base learning rate"),
 ):
     arcade_syntax_root = arcade_syntax_root or os.getenv("ARCADE_SYNTAX_ROOT")
     if arcade_syntax_root is None:
         typer.echo("ARCADE_SYNTAX_ROOT not set.")
         raise typer.Exit(code=1)
     tstamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    orchestrator = ArcadeOrchestrator(arcade_syntax_root, model_output_dir = f"training_{tstamp}")
+    orchestrator = ArcadeOrchestrator(
+        arcade_syntax_root, model_output_dir=f"training_{tstamp}"
+    )
     orchestrator.train(epochs, batch, base_lr)
 
 

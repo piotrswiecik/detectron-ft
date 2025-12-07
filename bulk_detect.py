@@ -9,14 +9,21 @@ from detectron2.data import MetadataCatalog
 
 app = typer.Typer()
 
+
 @app.command()
 def infer(
-        image_root: str = typer.Option(..., help="Path to the directory containing images"),
-        out_root: str = typer.Option("inference", help="Path to the output directory"),
-        model_dir: str = typer.Option(..., help="Path to the directory containing model_final.pth"),
-        num_classes: int = typer.Option(1, help="Must match the number of classes used in training"),
-        threshold: float = typer.Option(0.5, help="Minimum score threshold to display a prediction"),
-        use_cpu: bool = typer.Option(False, help="Force inference on CPU")
+    image_root: str = typer.Option(..., help="Path to the directory containing images"),
+    out_root: str = typer.Option("inference", help="Path to the output directory"),
+    model_dir: str = typer.Option(
+        ..., help="Path to the directory containing model_final.pth"
+    ),
+    num_classes: int = typer.Option(
+        1, help="Must match the number of classes used in training"
+    ),
+    threshold: float = typer.Option(
+        0.5, help="Minimum score threshold to display a prediction"
+    ),
+    use_cpu: bool = typer.Option(False, help="Force inference on CPU"),
 ):
     """
     Run inference on all images in a directory. Output visualizations to png files.
@@ -32,7 +39,11 @@ def infer(
         raise typer.Exit(code=1)
 
     cfg = get_cfg()
-    cfg.merge_from_file(model_zoo.get_config_file("COCO-InstanceSegmentation/mask_rcnn_R_50_FPN_3x.yaml"))
+    cfg.merge_from_file(
+        model_zoo.get_config_file(
+            "COCO-InstanceSegmentation/mask_rcnn_R_50_FPN_3x.yaml"
+        )
+    )
 
     cfg.MODEL.ROI_HEADS.NUM_CLASSES = num_classes
     cfg.MODEL.WEIGHTS = weights_path
@@ -68,7 +79,12 @@ def infer(
         else:
             temp_metadata.set(thing_classes=[f"class_{i}" for i in range(num_classes)])
 
-        v = Visualizer(im[:, :, ::-1], metadata=temp_metadata, scale=1.0, instance_mode=ColorMode.IMAGE)
+        v = Visualizer(
+            im[:, :, ::-1],
+            metadata=temp_metadata,
+            scale=1.0,
+            instance_mode=ColorMode.IMAGE,
+        )
 
         out = v.draw_instance_predictions(instances.to("cpu"))
 
@@ -77,6 +93,7 @@ def infer(
         output_filename = os.path.join(out_root, os.path.basename(image_path))
         cv2.imwrite(output_filename, result_image)
         print(f"Save to {output_filename}")
+
 
 if __name__ == "__main__":
     app()
