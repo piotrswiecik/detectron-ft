@@ -49,7 +49,6 @@ def run_grid(
 
     for params in param_combinations:
         tstamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        typer.echo(f"Training with params: {params} at {tstamp}")
 
         output_path = os.path.join("results", f"training_{tstamp}")
         os.makedirs(output_path, exist_ok=True)
@@ -67,7 +66,7 @@ def run_grid(
             arcade_syntax_root, model_output_dir=f"training_{tstamp}"
         )
 
-        # orchestrator.train(epochs, batch, params_dict["base_lr"], params_dict)
+        orchestrator.train(epochs, batch, params_dict["base_lr"], params_dict)
 
 
 if __name__ == "__main__":
