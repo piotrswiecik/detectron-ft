@@ -224,7 +224,7 @@ class ArcadeOrchestrator:
                 )
             )
 
-            self.cfg.DATASETS.TRAIN = ("arcade_train",)
+            self.cfg.DATASETS.TRAIN = (d_name,)
             self.cfg.DATASETS.TEST = (
                 ("arcade_val",) if "arcade_val" in DatasetCatalog.list() else ()
             )
