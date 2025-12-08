@@ -32,6 +32,35 @@ setup_logger()
 load_dotenv()
 
 
+def validation_mapper(dataset_dict):
+    dataset_dict = copy.deepcopy(dataset_dict)
+    image = utils.read_image(dataset_dict["file_name"], format="BGR")
+
+    augmentations = [
+        T.ResizeShortestEdge(
+            short_edge_length=[800],
+            max_size=1333,
+            sample_style="choice",
+        )
+    ]
+
+    aug_input = T.AugInput(image)
+    transforms = T.AugmentationList(augmentations)(aug_input)
+    image = aug_input.image
+
+    annos = [
+        utils.transform_instance_annotations(obj, transforms, image.shape[:2])
+        for obj in dataset_dict.pop("annotations")
+        if obj.get("iscrowd", 0) == 0
+    ]
+
+    dataset_dict["image"] = torch.as_tensor(image.transpose(2, 0, 1).astype("float32"))
+    instances = utils.annotations_to_instances(annos, image.shape[:2])
+    dataset_dict["instances"] = utils.filter_empty_instances(instances)
+
+    return dataset_dict
+
+
 def custom_mapper(dataset_dict):
     dataset_dict = copy.deepcopy(dataset_dict)
     image = utils.read_image(dataset_dict["file_name"], format="BGR")
@@ -68,7 +97,7 @@ class EvalHook(HookBase):
         self.data_loader = build_detection_test_loader(
             cfg,
             cfg.DATASETS.TEST[0],
-            mapper=None,
+            mapper=validation_mapper,
         )
         self.log = logging.getLogger(__name__)
 
