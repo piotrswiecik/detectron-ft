@@ -153,6 +153,10 @@ class EvalHook(HookBase):
                 for input_dict, pred in zip(inputs, predictions):
                     total_samples += 1
 
+                    if total_samples == 1:  # First sample only
+                        print(f"DEBUG: pred has instances: {'instances' in pred}, len: {len(pred['instances']) if 'instances' in pred else 'N/A'}")
+                        print(f"DEBUG: input has instances: {'instances' in input_dict}, len: {len(input_dict['instances']) if 'instances' in input_dict else 'N/A'}")
+
                     if "instances" not in pred or len(pred["instances"]) == 0:
                         continue
                     if "instances" not in input_dict or len(input_dict["instances"]) == 0:
