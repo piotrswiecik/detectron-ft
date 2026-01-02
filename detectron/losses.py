@@ -19,6 +19,9 @@ def calculate_dice_score(pred_masks, gt_masks, threshold=0.5):
     if pred_masks.numel() == 0 or gt_masks.numel() == 0:
         return torch.tensor(0.0, device=pred_masks.device)
 
+    # Ensure both on same device
+    gt_masks = gt_masks.to(pred_masks.device)
+
     # Binarize predictions
     pred_binary = (pred_masks > threshold).float()
     gt_binary = gt_masks.float()
@@ -47,6 +50,9 @@ def calculate_iou_score(pred_masks, gt_masks, threshold=0.5):
     """
     if pred_masks.numel() == 0 or gt_masks.numel() == 0:
         return torch.tensor(0.0, device=pred_masks.device)
+
+    # Ensure both on same device
+    gt_masks = gt_masks.to(pred_masks.device)
 
     # Binarize predictions
     pred_binary = (pred_masks > threshold).float()
