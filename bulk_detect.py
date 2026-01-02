@@ -58,7 +58,8 @@ def infer(
     image_paths = []
     for dirpath, dirnames, filenames in os.walk(image_root):
         for filename in filenames:
-            image_paths.append(os.path.join(dirpath, filename))
+            if filename.lower().endswith((".jpg", ".jpeg", ".png")):
+                image_paths.append(os.path.join(dirpath, filename))
 
     os.makedirs(out_root, exist_ok=True)
     for image_path in image_paths:

@@ -30,6 +30,7 @@ def run_training(
     tstamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     output_path = os.path.join("results", f"training_{tstamp}")
     os.makedirs(output_path, exist_ok=True)
+    json.dump(params, open(os.path.join(output_path, "params.json"), "w"))
     orchestrator = ArcadeOrchestrator(
         arcade_syntax_root, model_output_dir=output_path
     )

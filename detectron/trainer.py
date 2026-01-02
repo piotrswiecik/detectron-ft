@@ -27,6 +27,7 @@ import torch
 from dotenv import load_dotenv
 
 from dataset import Adapter
+from detectron.losses import calculate_dice_score, calculate_iou_score
 
 setup_logger()
 load_dotenv()
@@ -105,15 +106,15 @@ class EvalHook(HookBase):
         total = len(self.data_loader)
         num_warmup = min(5, total - 1)
 
-        start_time = time.perf_counter()
         total_compute_time = 0
         losses = []
+        iou_scores = []
+        dice_scores = []
 
         model = self.trainer.model  # type: ignore
 
         for idx, inputs in enumerate(self.data_loader):
             if idx == num_warmup:
-                start_time = time.perf_counter()
                 total_compute_time = 0
 
             start_compute_time = time.perf_counter()
@@ -128,17 +129,75 @@ class EvalHook(HookBase):
                     loss_dict = model(inputs)
                     model.eval()
 
-            losses.append(sum(loss for loss in loss_dict.values()))
+                losses.append(sum(loss for loss in loss_dict.values()))
+
+                was_training = model.training
+                model.eval()
+                predictions = model(inputs)
+                if was_training:
+                    model.train()
+
+                # Calculate IoU and DICE
+                for input_dict, pred in zip(inputs, predictions):
+                    if "instances" not in pred or len(pred["instances"]) == 0:
+                        continue
+
+                    # Get predicted masks
+                    if pred["instances"].has("pred_masks"):
+                        pred_masks = pred["instances"].pred_masks  # (N, H, W)
+
+                        # Get ground truth masks
+                        if "instances" in input_dict and input_dict["instances"].has("gt_masks"):
+                            gt_masks = input_dict["instances"].gt_masks  # (M, H, W)
+
+                            # Only calculate if we have both
+                            if len(pred_masks) > 0 and len(gt_masks) > 0:
+                                # Resize pred masks to match gt masks if needed
+                                if pred_masks.shape[-2:] != gt_masks.shape[-2:]:
+                                    pred_masks = torch.nn.functional.interpolate(
+                                        pred_masks.unsqueeze(1).float(),
+                                        size=gt_masks.shape[-2:],
+                                        mode='bilinear',
+                                        align_corners=False
+                                    ).squeeze(1)
+
+                                # Match predictions to ground truth (use first N)
+                                num_matches = min(len(pred_masks), len(gt_masks))
+                                if num_matches > 0:
+                                    matched_pred = pred_masks[:num_matches]
+                                    matched_gt = gt_masks[:num_matches]
+
+                                    iou = calculate_iou_score(matched_pred, matched_gt)
+                                    dice = calculate_dice_score(matched_pred, matched_gt)
+
+                                    iou_scores.append(iou.item())
+                                    dice_scores.append(dice.item())
 
             if torch.cuda.is_available():
                 torch.cuda.synchronize()
             total_compute_time += time.perf_counter() - start_compute_time
 
+        # Calculate mean metrics
         mean_loss = torch.tensor(losses).mean().item()
+        mean_iou = torch.tensor(iou_scores).mean().item() if iou_scores else 0.0
+        mean_dice = torch.tensor(dice_scores).mean().item() if dice_scores else 0.0
 
+        # Store metrics in trainer storage
         self.trainer.storage.put_scalar("validation_loss", mean_loss)
+        self.trainer.storage.put_scalar("validation_iou", mean_iou)
+        self.trainer.storage.put_scalar("validation_dice", mean_dice)
 
-        self.log.info(f"Validation Loss: {mean_loss:.4f}")
+        # Log metrics directly to MLflow
+        mlflow.log_metrics(
+            {
+                "validation_loss": mean_loss,
+                "validation_iou": mean_iou,
+                "validation_dice": mean_dice,
+            },
+            step=self.trainer.iter,
+        )
+
+        self.log.info(f"Validation Loss: {mean_loss:.4f}, IoU: {mean_iou:.4f}, DICE: {mean_dice:.4f}")
         comm.synchronize()
 
     def after_step(self):
