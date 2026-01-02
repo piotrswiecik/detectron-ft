@@ -153,10 +153,6 @@ class EvalHook(HookBase):
                 for input_dict, pred in zip(inputs, predictions):
                     total_samples += 1
 
-                    if total_samples == 1:  # First sample only
-                        print(f"DEBUG: pred has instances: {'instances' in pred}, len: {len(pred['instances']) if 'instances' in pred else 'N/A'}")
-                        print(f"DEBUG: input has instances: {'instances' in input_dict}, len: {len(input_dict['instances']) if 'instances' in input_dict else 'N/A'}")
-
                     if "instances" not in pred or len(pred["instances"]) == 0:
                         continue
                     if "instances" not in input_dict or len(input_dict["instances"]) == 0:
@@ -166,49 +162,60 @@ class EvalHook(HookBase):
                     if not input_dict["instances"].has("gt_masks"):
                         continue
 
-                    pred_masks = pred["instances"].pred_masks
-                    gt_masks = input_dict["instances"].gt_masks
-
-                    if len(pred_masks) == 0 or len(gt_masks) == 0:
-                        continue
+                    pred_instances = pred["instances"]
+                    gt_instances = input_dict["instances"]
 
                     # Convert GT masks
-                    if hasattr(gt_masks, 'tensor'):
-                        gt_mask_tensor = gt_masks.tensor
-                    elif hasattr(gt_masks, 'to_bitmasks'):
-                        h, w = input_dict["instances"].image_size
-                        gt_mask_tensor = gt_masks.to_bitmasks(h, w).tensor
+                    if hasattr(gt_instances.gt_masks, 'tensor'):
+                        gt_mask_tensor = gt_instances.gt_masks.tensor
+                    elif hasattr(gt_instances.gt_masks, 'to_bitmasks'):
+                        h, w = gt_instances.image_size
+                        gt_mask_tensor = gt_instances.gt_masks.to_bitmasks(h, w).tensor
                     else:
                         continue
 
                     if len(gt_mask_tensor) == 0:
                         continue
 
-                    # Match dimensions and calculate
-                    pred_masks = pred_masks.float().to(gt_mask_tensor.device)
-                    gt_mask_tensor = gt_mask_tensor.float()
+                    # Match pred masks to GT masks using box IoU
+                    from detectron2.structures import pairwise_iou
+                    box_iou = pairwise_iou(pred_instances.pred_boxes, gt_instances.gt_boxes)
 
-                    if pred_masks.shape[-2:] != gt_mask_tensor.shape[-2:]:
-                        pred_masks = torch.nn.functional.interpolate(
-                            pred_masks.unsqueeze(1),
-                            size=gt_mask_tensor.shape[-2:],
-                            mode='bilinear',
-                            align_corners=False
-                        ).squeeze(1)
+                    # For each GT, find best matching prediction
+                    for gt_idx in range(len(gt_instances)):
+                        if box_iou.shape[0] == 0:
+                            continue
 
-                    num_matches = min(len(pred_masks), len(gt_mask_tensor))
-                    if num_matches == 0:
-                        continue
+                        # Find prediction with highest box IoU for this GT
+                        best_pred_idx = box_iou[:, gt_idx].argmax()
 
-                    iou = calculate_iou_score(pred_masks[:num_matches], gt_mask_tensor[:num_matches])
-                    dice = calculate_dice_score(pred_masks[:num_matches], gt_mask_tensor[:num_matches])
+                        # Only consider if box IoU > 0.5
+                        if box_iou[best_pred_idx, gt_idx] < 0.5:
+                            continue
 
-                    if successful_calculations == 0:  # First time only
-                        print(f"CALC: iou={iou}, dice={dice}, type={type(iou)}, device={iou.device if hasattr(iou, 'device') else 'N/A'}")
+                        # Get masks
+                        pred_mask = pred_instances.pred_masks[best_pred_idx]
+                        gt_mask = gt_mask_tensor[gt_idx]
 
-                    iou_scores.append(iou.item())
-                    dice_scores.append(dice.item())
-                    successful_calculations += 1
+                        # Resize if needed
+                        pred_mask = pred_mask.float().to(gt_mask.device)
+                        gt_mask = gt_mask.float()
+
+                        if pred_mask.shape != gt_mask.shape:
+                            pred_mask = torch.nn.functional.interpolate(
+                                pred_mask.unsqueeze(0).unsqueeze(0),
+                                size=gt_mask.shape,
+                                mode='bilinear',
+                                align_corners=False
+                            ).squeeze()
+
+                        # Calculate metrics for this pair
+                        iou = calculate_iou_score(pred_mask.unsqueeze(0), gt_mask.unsqueeze(0))
+                        dice = calculate_dice_score(pred_mask.unsqueeze(0), gt_mask.unsqueeze(0))
+
+                        iou_scores.append(iou.item())
+                        dice_scores.append(dice.item())
+                        successful_calculations += 1
 
             if torch.cuda.is_available():
                 torch.cuda.synchronize()
