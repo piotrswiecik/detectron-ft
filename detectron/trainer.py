@@ -240,18 +240,17 @@ class EvalHook(HookBase):
         mean_iou = torch.tensor(iou_scores).mean().item() if iou_scores else 0.0
         mean_dice = torch.tensor(dice_scores).mean().item() if dice_scores else 0.0
 
-        # Log debug information
-        self.log.info("=" * 80)
-        self.log.info("IoU/DICE Calculation Debug Info:")
-        self.log.info(f"  Total samples processed: {total_samples}")
-        self.log.info(f"  No prediction instances: {no_pred_instances}")
-        self.log.info(f"  No ground truth instances: {no_gt_instances}")
-        self.log.info(f"  No prediction masks: {no_pred_masks}")
-        self.log.info(f"  No ground truth masks: {no_gt_masks}")
-        self.log.info(f"  Successful calculations: {successful_calculations}")
-        self.log.info(f"  IoU scores collected: {len(iou_scores)}")
-        self.log.info(f"  DICE scores collected: {len(dice_scores)}")
-        self.log.info("=" * 80)
+        # Debug output
+        print("\n" + "=" * 80)
+        print(f"VALIDATION @ iter {self.trainer.iter}")
+        print(f"Samples: {total_samples} | Success: {successful_calculations} | Scores: {len(iou_scores)}")
+        print(f"No pred_inst: {no_pred_instances} | No GT_inst: {no_gt_instances}")
+        print(f"No pred_masks: {no_pred_masks} | No GT_masks: {no_gt_masks}")
+        if iou_scores:
+            print(f"IoU: {mean_iou:.4f} | DICE: {mean_dice:.4f}")
+        else:
+            print("NO SCORES CALCULATED - Check above counters")
+        print("=" * 80 + "\n")
 
         # Store metrics in trainer storage
         self.trainer.storage.put_scalar("validation_loss", mean_loss)
