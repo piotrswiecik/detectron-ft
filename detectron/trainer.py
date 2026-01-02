@@ -154,95 +154,54 @@ class EvalHook(HookBase):
                     total_samples += 1
 
                     if "instances" not in pred or len(pred["instances"]) == 0:
-                        no_pred_instances += 1
                         continue
-
-                    # Skip if no ground truth instances
                     if "instances" not in input_dict or len(input_dict["instances"]) == 0:
-                        no_gt_instances += 1
                         continue
-
-                    # Get predicted masks
                     if not pred["instances"].has("pred_masks"):
-                        no_pred_masks += 1
+                        continue
+                    if not input_dict["instances"].has("gt_masks"):
                         continue
 
                     pred_masks = pred["instances"].pred_masks
-                    if len(pred_masks) == 0:
-                        no_pred_masks += 1
-                        continue
-
-                    # Get ground truth masks
-                    if not input_dict["instances"].has("gt_masks"):
-                        no_gt_masks += 1
-                        continue
-
                     gt_masks = input_dict["instances"].gt_masks
 
-                    try:
-                        # Convert masks to tensor format
-                        # Handle PolygonMasks, BitMasks, or direct tensors
-                        if hasattr(gt_masks, 'tensor'):
-                            # BitMasks format
-                            gt_mask_tensor = gt_masks.tensor
-                        elif hasattr(gt_masks, 'to_bitmasks'):
-                            # PolygonMasks format - convert to BitMasks
-                            h, w = input_dict["instances"].image_size
-                            gt_mask_tensor = gt_masks.to_bitmasks(h, w).tensor
-                        elif isinstance(gt_masks, torch.Tensor):
-                            # Already a tensor
-                            gt_mask_tensor = gt_masks
-                        else:
-                            # Unknown format, skip
-                            continue
-
-                        if len(gt_mask_tensor) == 0:
-                            empty_after_convert += 1
-                            continue
-
-                        # Ensure tensors are on same device
-                        if gt_mask_tensor.device != pred_masks.device:
-                            gt_mask_tensor = gt_mask_tensor.to(pred_masks.device)
-
-                        # Ensure float type for calculations
-                        pred_masks_float = pred_masks.float()
-                        gt_mask_tensor = gt_mask_tensor.float()
-
-                        # Resize pred masks to match gt masks if needed
-                        if pred_masks_float.shape[-2:] != gt_mask_tensor.shape[-2:]:
-                            pred_masks_float = torch.nn.functional.interpolate(
-                                pred_masks_float.unsqueeze(1),
-                                size=gt_mask_tensor.shape[-2:],
-                                mode='bilinear',
-                                align_corners=False
-                            ).squeeze(1)
-
-                        # Match predictions to ground truth (simple: use first N)
-                        num_matches = min(len(pred_masks_float), len(gt_mask_tensor))
-                        if num_matches > 0:
-                            matched_pred = pred_masks_float[:num_matches]
-                            matched_gt = gt_mask_tensor[:num_matches]
-
-                            iou = calculate_iou_score(matched_pred, matched_gt)
-                            dice = calculate_dice_score(matched_pred, matched_gt)
-
-                            if idx == 0 and total_samples <= 2:  # Debug first sample
-                                print(f"Sample {total_samples}: iou={iou.item():.4f}, dice={dice.item():.4f}, finite={torch.isfinite(iou) and torch.isfinite(dice)}")
-
-                            # Validate scores before appending
-                            if torch.isfinite(iou) and torch.isfinite(dice):
-                                iou_scores.append(iou.item())
-                                dice_scores.append(dice.item())
-                                successful_calculations += 1
-                            else:
-                                non_finite_scores += 1
-                        else:
-                            zero_matches += 1
-
-                    except Exception as e:
-                        exceptions += 1
-                        print(f"EXCEPTION: {e}")
+                    if len(pred_masks) == 0 or len(gt_masks) == 0:
                         continue
+
+                    # Convert GT masks
+                    if hasattr(gt_masks, 'tensor'):
+                        gt_mask_tensor = gt_masks.tensor
+                    elif hasattr(gt_masks, 'to_bitmasks'):
+                        h, w = input_dict["instances"].image_size
+                        gt_mask_tensor = gt_masks.to_bitmasks(h, w).tensor
+                    else:
+                        continue
+
+                    if len(gt_mask_tensor) == 0:
+                        continue
+
+                    # Match dimensions and calculate
+                    pred_masks = pred_masks.float().to(gt_mask_tensor.device)
+                    gt_mask_tensor = gt_mask_tensor.float()
+
+                    if pred_masks.shape[-2:] != gt_mask_tensor.shape[-2:]:
+                        pred_masks = torch.nn.functional.interpolate(
+                            pred_masks.unsqueeze(1),
+                            size=gt_mask_tensor.shape[-2:],
+                            mode='bilinear',
+                            align_corners=False
+                        ).squeeze(1)
+
+                    num_matches = min(len(pred_masks), len(gt_mask_tensor))
+                    if num_matches == 0:
+                        continue
+
+                    iou = calculate_iou_score(pred_masks[:num_matches], gt_mask_tensor[:num_matches])
+                    dice = calculate_dice_score(pred_masks[:num_matches], gt_mask_tensor[:num_matches])
+
+                    iou_scores.append(iou.item())
+                    dice_scores.append(dice.item())
+                    successful_calculations += 1
 
             if torch.cuda.is_available():
                 torch.cuda.synchronize()
