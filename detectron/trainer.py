@@ -176,13 +176,25 @@ class EvalHook(HookBase):
                     # Convert GT masks
                     if hasattr(gt_instances.gt_masks, 'tensor'):
                         gt_mask_tensor = gt_instances.gt_masks.tensor
+                        if total_samples == 1:
+                            with open("/tmp/iou_debug.txt", "a") as f:
+                                f.write(f"GT masks: BitMasks, len={len(gt_mask_tensor)}\n")
                     elif hasattr(gt_instances.gt_masks, 'to_bitmasks'):
                         h, w = gt_instances.image_size
                         gt_mask_tensor = gt_instances.gt_masks.to_bitmasks(h, w).tensor
+                        if total_samples == 1:
+                            with open("/tmp/iou_debug.txt", "a") as f:
+                                f.write(f"GT masks: PolygonMasks converted, len={len(gt_mask_tensor)}\n")
                     else:
+                        if total_samples == 1:
+                            with open("/tmp/iou_debug.txt", "a") as f:
+                                f.write(f"GT masks: UNKNOWN FORMAT, type={type(gt_instances.gt_masks)}\n")
                         continue
 
                     if len(gt_mask_tensor) == 0:
+                        if total_samples == 1:
+                            with open("/tmp/iou_debug.txt", "a") as f:
+                                f.write(f"GT masks: EMPTY after conversion\n")
                         continue
 
                     # Match pred masks to GT masks using box IoU
