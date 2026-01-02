@@ -165,6 +165,14 @@ class EvalHook(HookBase):
                     pred_instances = pred["instances"]
                     gt_instances = input_dict["instances"]
 
+                    if total_samples == 1:
+                        with open("/tmp/iou_debug.txt", "w") as f:
+                            f.write(f"Reached matching code\n")
+                            f.write(f"Pred instances: {len(pred_instances)}\n")
+                            f.write(f"GT instances: {len(gt_instances)}\n")
+                            f.write(f"Pred has masks: {pred_instances.has('pred_masks')}\n")
+                            f.write(f"GT has masks: {gt_instances.has('gt_masks')}\n")
+
                     # Convert GT masks
                     if hasattr(gt_instances.gt_masks, 'tensor'):
                         gt_mask_tensor = gt_instances.gt_masks.tensor
@@ -182,9 +190,13 @@ class EvalHook(HookBase):
                     box_iou = pairwise_iou(pred_instances.pred_boxes, gt_instances.gt_boxes)
 
                     if total_samples == 1:
-                        print(f"Box IoU max values: {box_iou.max(dim=0).values if box_iou.shape[0] > 0 else 'empty'}")
+                        with open("/tmp/iou_debug.txt", "a") as f:
+                            f.write(f"Box IoU shape: {box_iou.shape}\n")
+                            if box_iou.shape[0] > 0:
+                                f.write(f"Box IoU max per GT: {box_iou.max(dim=0).values}\n")
 
                     # For each GT, find best matching prediction
+                    matches_found = 0
                     for gt_idx in range(len(gt_instances)):
                         if box_iou.shape[0] == 0:
                             continue
@@ -193,12 +205,15 @@ class EvalHook(HookBase):
                         best_pred_idx = box_iou[:, gt_idx].argmax()
                         best_iou = box_iou[best_pred_idx, gt_idx].item()
 
-                        if total_samples == 1 and gt_idx == 0:
-                            print(f"GT 0: best_pred={best_pred_idx}, box_iou={best_iou:.3f}")
+                        if total_samples == 1:
+                            with open("/tmp/iou_debug.txt", "a") as f:
+                                f.write(f"GT {gt_idx}: best_iou={best_iou:.3f}, threshold=0.5, pass={best_iou >= 0.5}\n")
 
                         # Only consider if box IoU > 0.5
                         if best_iou < 0.5:
                             continue
+
+                        matches_found += 1
 
                         # Get masks
                         pred_mask = pred_instances.pred_masks[best_pred_idx]
@@ -219,6 +234,14 @@ class EvalHook(HookBase):
                         # Calculate metrics for this pair
                         iou = calculate_iou_score(pred_mask.unsqueeze(0), gt_mask.unsqueeze(0))
                         dice = calculate_dice_score(pred_mask.unsqueeze(0), gt_mask.unsqueeze(0))
+
+                        if total_samples == 1 and successful_calculations == 0:
+                            with open("/tmp/iou_debug.txt", "a") as f:
+                                f.write(f"FIRST CALCULATION:\n")
+                                f.write(f"  IoU: {iou.item():.4f}\n")
+                                f.write(f"  DICE: {dice.item():.4f}\n")
+                                f.write(f"  Pred mask shape: {pred_mask.shape}\n")
+                                f.write(f"  GT mask shape: {gt_mask.shape}\n")
 
                         iou_scores.append(iou.item())
                         dice_scores.append(dice.item())
