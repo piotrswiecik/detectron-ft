@@ -174,13 +174,18 @@ class EvalHook(HookBase):
                             f.write(f"GT has masks: {gt_instances.has('gt_masks')}\n")
 
                     # Convert GT masks
-                    from detectron2.structures.masks import PolygonMasks, BitMasks
+                    from detectron2.structures.masks import PolygonMasks, BitMasks, polygons_to_bitmask
 
                     if isinstance(gt_instances.gt_masks, BitMasks):
                         gt_mask_tensor = gt_instances.gt_masks.tensor
                     elif isinstance(gt_instances.gt_masks, PolygonMasks):
                         h, w = gt_instances.image_size
-                        gt_mask_tensor = gt_instances.gt_masks.to_bitmasks(h, w).tensor
+                        # Convert each polygon to bitmask
+                        gt_masks_list = []
+                        for polygon in gt_instances.gt_masks.polygons:
+                            mask = polygons_to_bitmask(polygon, h, w)
+                            gt_masks_list.append(torch.from_numpy(mask))
+                        gt_mask_tensor = torch.stack(gt_masks_list) if gt_masks_list else torch.empty(0)
                     elif isinstance(gt_instances.gt_masks, torch.Tensor):
                         gt_mask_tensor = gt_instances.gt_masks
                     else:
