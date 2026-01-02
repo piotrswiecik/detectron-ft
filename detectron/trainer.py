@@ -111,6 +111,14 @@ class EvalHook(HookBase):
         iou_scores = []
         dice_scores = []
 
+        # Debug counters
+        total_samples = 0
+        no_pred_instances = 0
+        no_gt_instances = 0
+        no_pred_masks = 0
+        no_gt_masks = 0
+        successful_calculations = 0
+
         model = self.trainer.model  # type: ignore
 
         for idx, inputs in enumerate(self.data_loader):
@@ -139,23 +147,30 @@ class EvalHook(HookBase):
 
                 # Calculate IoU and DICE
                 for input_dict, pred in zip(inputs, predictions):
+                    total_samples += 1
+
                     if "instances" not in pred or len(pred["instances"]) == 0:
+                        no_pred_instances += 1
                         continue
 
                     # Skip if no ground truth instances
                     if "instances" not in input_dict or len(input_dict["instances"]) == 0:
+                        no_gt_instances += 1
                         continue
 
                     # Get predicted masks
                     if not pred["instances"].has("pred_masks"):
+                        no_pred_masks += 1
                         continue
 
                     pred_masks = pred["instances"].pred_masks
                     if len(pred_masks) == 0:
+                        no_pred_masks += 1
                         continue
 
                     # Get ground truth masks
                     if not input_dict["instances"].has("gt_masks"):
+                        no_gt_masks += 1
                         continue
 
                     gt_masks = input_dict["instances"].gt_masks
@@ -210,6 +225,7 @@ class EvalHook(HookBase):
                             if torch.isfinite(iou) and torch.isfinite(dice):
                                 iou_scores.append(iou.item())
                                 dice_scores.append(dice.item())
+                                successful_calculations += 1
 
                     except Exception as e:
                         self.log.warning(f"Error calculating IoU/DICE for sample: {e}")
@@ -223,6 +239,19 @@ class EvalHook(HookBase):
         mean_loss = torch.tensor(losses).mean().item()
         mean_iou = torch.tensor(iou_scores).mean().item() if iou_scores else 0.0
         mean_dice = torch.tensor(dice_scores).mean().item() if dice_scores else 0.0
+
+        # Log debug information
+        self.log.info("=" * 80)
+        self.log.info("IoU/DICE Calculation Debug Info:")
+        self.log.info(f"  Total samples processed: {total_samples}")
+        self.log.info(f"  No prediction instances: {no_pred_instances}")
+        self.log.info(f"  No ground truth instances: {no_gt_instances}")
+        self.log.info(f"  No prediction masks: {no_pred_masks}")
+        self.log.info(f"  No ground truth masks: {no_gt_masks}")
+        self.log.info(f"  Successful calculations: {successful_calculations}")
+        self.log.info(f"  IoU scores collected: {len(iou_scores)}")
+        self.log.info(f"  DICE scores collected: {len(dice_scores)}")
+        self.log.info("=" * 80)
 
         # Store metrics in trainer storage
         self.trainer.storage.put_scalar("validation_loss", mean_loss)
