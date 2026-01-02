@@ -118,6 +118,10 @@ class EvalHook(HookBase):
         no_pred_masks = 0
         no_gt_masks = 0
         successful_calculations = 0
+        empty_after_convert = 0
+        zero_matches = 0
+        non_finite_scores = 0
+        exceptions = 0
 
         model = self.trainer.model  # type: ignore
 
@@ -193,6 +197,7 @@ class EvalHook(HookBase):
                             continue
 
                         if len(gt_mask_tensor) == 0:
+                            empty_after_convert += 1
                             continue
 
                         # Ensure tensors are on same device
@@ -226,9 +231,14 @@ class EvalHook(HookBase):
                                 iou_scores.append(iou.item())
                                 dice_scores.append(dice.item())
                                 successful_calculations += 1
+                            else:
+                                non_finite_scores += 1
+                        else:
+                            zero_matches += 1
 
                     except Exception as e:
-                        self.log.warning(f"Error calculating IoU/DICE for sample: {e}")
+                        exceptions += 1
+                        print(f"EXCEPTION: {e}")
                         continue
 
             if torch.cuda.is_available():
@@ -243,13 +253,15 @@ class EvalHook(HookBase):
         # Debug output
         print("\n" + "=" * 80)
         print(f"VALIDATION @ iter {self.trainer.iter}")
-        print(f"Samples: {total_samples} | Success: {successful_calculations} | Scores: {len(iou_scores)}")
+        print(f"Samples: {total_samples} | Success: {successful_calculations}")
         print(f"No pred_inst: {no_pred_instances} | No GT_inst: {no_gt_instances}")
         print(f"No pred_masks: {no_pred_masks} | No GT_masks: {no_gt_masks}")
+        print(f"Empty after convert: {empty_after_convert} | Zero matches: {zero_matches}")
+        print(f"Non-finite scores: {non_finite_scores} | Exceptions: {exceptions}")
         if iou_scores:
             print(f"IoU: {mean_iou:.4f} | DICE: {mean_dice:.4f}")
         else:
-            print("NO SCORES CALCULATED - Check above counters")
+            print("NO SCORES - see counters above to diagnose")
         print("=" * 80 + "\n")
 
         # Store metrics in trainer storage
