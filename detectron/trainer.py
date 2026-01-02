@@ -199,6 +199,9 @@ class EvalHook(HookBase):
                     iou = calculate_iou_score(pred_masks[:num_matches], gt_mask_tensor[:num_matches])
                     dice = calculate_dice_score(pred_masks[:num_matches], gt_mask_tensor[:num_matches])
 
+                    if successful_calculations == 0:  # First time only
+                        print(f"CALC: iou={iou}, dice={dice}, type={type(iou)}, device={iou.device if hasattr(iou, 'device') else 'N/A'}")
+
                     iou_scores.append(iou.item())
                     dice_scores.append(dice.item())
                     successful_calculations += 1
