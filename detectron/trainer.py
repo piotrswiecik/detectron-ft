@@ -177,36 +177,40 @@ class EvalHook(HookBase):
                     from detectron2.structures.masks import PolygonMasks, BitMasks, polygons_to_bitmask
 
                     try:
+                        device = pred_instances.pred_masks.device
+
                         if isinstance(gt_instances.gt_masks, BitMasks):
-                            gt_mask_tensor = gt_instances.gt_masks.tensor
+                            gt_mask_tensor = gt_instances.gt_masks.tensor.to(device)
                         elif isinstance(gt_instances.gt_masks, PolygonMasks):
                             h, w = gt_instances.image_size
                             gt_masks_list = []
                             for polygon in gt_instances.gt_masks.polygons:
                                 mask = polygons_to_bitmask(polygon, h, w)
-                                gt_masks_list.append(torch.from_numpy(mask))
+                                gt_masks_list.append(torch.from_numpy(mask).to(device))
                             if not gt_masks_list:
                                 continue
-                            gt_mask_tensor = torch.stack(gt_masks_list).to(pred_instances.pred_masks.device)
+                            gt_mask_tensor = torch.stack(gt_masks_list)
                         elif isinstance(gt_instances.gt_masks, torch.Tensor):
-                            gt_mask_tensor = gt_instances.gt_masks
+                            gt_mask_tensor = gt_instances.gt_masks.to(device)
                         else:
                             continue
+
+                        if len(gt_mask_tensor) == 0:
+                            continue
+
+                        # Move GT boxes to same device
+                        from detectron2.structures import Boxes
+                        gt_boxes_on_device = Boxes(gt_instances.gt_boxes.tensor.to(device))
+
                     except Exception as e:
                         if total_samples == 1:
                             with open("/tmp/iou_debug.txt", "a") as f:
-                                f.write(f"Mask conversion error: {e}\n")
-                        continue
-
-                    if len(gt_mask_tensor) == 0:
-                        if total_samples == 1:
-                            with open("/tmp/iou_debug.txt", "a") as f:
-                                f.write(f"GT masks: EMPTY after conversion\n")
+                                f.write(f"Conversion error: {e}\n")
                         continue
 
                     # Match pred masks to GT masks using box IoU
                     from detectron2.structures import pairwise_iou
-                    box_iou = pairwise_iou(pred_instances.pred_boxes, gt_instances.gt_boxes)
+                    box_iou = pairwise_iou(pred_instances.pred_boxes, gt_boxes_on_device)
 
                     if total_samples == 1:
                         with open("/tmp/iou_debug.txt", "a") as f:
