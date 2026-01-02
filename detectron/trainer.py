@@ -181,6 +181,9 @@ class EvalHook(HookBase):
                     from detectron2.structures import pairwise_iou
                     box_iou = pairwise_iou(pred_instances.pred_boxes, gt_instances.gt_boxes)
 
+                    if total_samples == 1:
+                        print(f"Box IoU max values: {box_iou.max(dim=0).values if box_iou.shape[0] > 0 else 'empty'}")
+
                     # For each GT, find best matching prediction
                     for gt_idx in range(len(gt_instances)):
                         if box_iou.shape[0] == 0:
@@ -188,9 +191,13 @@ class EvalHook(HookBase):
 
                         # Find prediction with highest box IoU for this GT
                         best_pred_idx = box_iou[:, gt_idx].argmax()
+                        best_iou = box_iou[best_pred_idx, gt_idx].item()
+
+                        if total_samples == 1 and gt_idx == 0:
+                            print(f"GT 0: best_pred={best_pred_idx}, box_iou={best_iou:.3f}")
 
                         # Only consider if box IoU > 0.5
-                        if box_iou[best_pred_idx, gt_idx] < 0.5:
+                        if best_iou < 0.5:
                             continue
 
                         # Get masks
