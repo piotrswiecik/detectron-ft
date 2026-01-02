@@ -226,6 +226,9 @@ class EvalHook(HookBase):
                             iou = calculate_iou_score(matched_pred, matched_gt)
                             dice = calculate_dice_score(matched_pred, matched_gt)
 
+                            if idx == 0 and total_samples <= 2:  # Debug first sample
+                                print(f"Sample {total_samples}: iou={iou.item():.4f}, dice={dice.item():.4f}, finite={torch.isfinite(iou) and torch.isfinite(dice)}")
+
                             # Validate scores before appending
                             if torch.isfinite(iou) and torch.isfinite(dice):
                                 iou_scores.append(iou.item())
