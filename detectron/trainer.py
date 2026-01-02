@@ -176,19 +176,26 @@ class EvalHook(HookBase):
                     # Convert GT masks
                     from detectron2.structures.masks import PolygonMasks, BitMasks, polygons_to_bitmask
 
-                    if isinstance(gt_instances.gt_masks, BitMasks):
-                        gt_mask_tensor = gt_instances.gt_masks.tensor
-                    elif isinstance(gt_instances.gt_masks, PolygonMasks):
-                        h, w = gt_instances.image_size
-                        # Convert each polygon to bitmask
-                        gt_masks_list = []
-                        for polygon in gt_instances.gt_masks.polygons:
-                            mask = polygons_to_bitmask(polygon, h, w)
-                            gt_masks_list.append(torch.from_numpy(mask))
-                        gt_mask_tensor = torch.stack(gt_masks_list) if gt_masks_list else torch.empty(0)
-                    elif isinstance(gt_instances.gt_masks, torch.Tensor):
-                        gt_mask_tensor = gt_instances.gt_masks
-                    else:
+                    try:
+                        if isinstance(gt_instances.gt_masks, BitMasks):
+                            gt_mask_tensor = gt_instances.gt_masks.tensor
+                        elif isinstance(gt_instances.gt_masks, PolygonMasks):
+                            h, w = gt_instances.image_size
+                            gt_masks_list = []
+                            for polygon in gt_instances.gt_masks.polygons:
+                                mask = polygons_to_bitmask(polygon, h, w)
+                                gt_masks_list.append(torch.from_numpy(mask))
+                            if not gt_masks_list:
+                                continue
+                            gt_mask_tensor = torch.stack(gt_masks_list).to(pred_instances.pred_masks.device)
+                        elif isinstance(gt_instances.gt_masks, torch.Tensor):
+                            gt_mask_tensor = gt_instances.gt_masks
+                        else:
+                            continue
+                    except Exception as e:
+                        if total_samples == 1:
+                            with open("/tmp/iou_debug.txt", "a") as f:
+                                f.write(f"Mask conversion error: {e}\n")
                         continue
 
                     if len(gt_mask_tensor) == 0:
