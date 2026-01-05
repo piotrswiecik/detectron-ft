@@ -199,8 +199,23 @@ class EvalHook(HookBase):
         # Reset converter counter for this epoch
         self.converter.reset_counter()
 
+        # ============ DIAGNOSTIC: Check ground truth loading ============
+        self.log.info(f"[DIAG] arcade_ground_truth has {len(self.arcade_ground_truth)} images")
+        if self.arcade_ground_truth:
+            sample_key = next(iter(self.arcade_ground_truth.keys()))
+            sample_val = self.arcade_ground_truth[sample_key]
+            self.log.info(f"[DIAG] Sample GT key type: {type(sample_key).__name__}, value: {sample_key}")
+            self.log.info(f"[DIAG] Sample GT has {len(sample_val['annotations'])} annotations, dims: {sample_val['height']}x{sample_val['width']}")
+
         start_time = time.perf_counter()
         total_compute_time = 0
+
+        # Diagnostic counters
+        diag_images_processed = 0
+        diag_images_with_gt = 0
+        diag_id_mismatches = 0
+        diag_raw_instances_total = 0
+        diag_score_filtered = 0
 
         for idx, inputs in enumerate(data_loader):
             if idx == num_warmup:
@@ -224,12 +239,29 @@ class EvalHook(HookBase):
                     outputs = model(inputs)
 
                     for input_dict, output in zip(inputs, outputs):
+                        diag_images_processed += 1
                         image_id = input_dict["image_id"]
+
+                        # ============ DIAGNOSTIC: Log first image details ============
+                        if diag_images_processed == 1:
+                            self.log.info(f"[DIAG] First input image_id: {image_id} (type: {type(image_id).__name__})")
+                            self.log.info(f"[DIAG] First input image shape: {input_dict['image'].shape}")
+                            instances = output["instances"].to("cpu")
+                            self.log.info(f"[DIAG] First output has {len(instances)} raw instances")
+                            if len(instances) > 0:
+                                self.log.info(f"[DIAG] First instance scores: {instances.scores[:5].tolist()}")
+                                if instances.has("pred_masks"):
+                                    self.log.info(f"[DIAG] pred_masks shape: {instances.pred_masks.shape}")
+                                    self.log.info(f"[DIAG] pred_masks dtype: {instances.pred_masks.dtype}")
 
                         # Skip if no ground truth for this image
                         if image_id not in self.arcade_ground_truth:
+                            diag_id_mismatches += 1
+                            if diag_id_mismatches <= 3:
+                                self.log.warning(f"[DIAG] image_id {image_id} not in arcade_ground_truth")
                             continue
 
+                        diag_images_with_gt += 1
                         gt_data = self.arcade_ground_truth[image_id]
                         original_height = gt_data["height"]
                         original_width = gt_data["width"]
@@ -241,6 +273,13 @@ class EvalHook(HookBase):
 
                         # Convert predictions to ARCADE format with coordinate scaling
                         instances = output["instances"].to("cpu")
+                        diag_raw_instances_total += len(instances)
+
+                        # Count how many get filtered by score
+                        if len(instances) > 0:
+                            scores_above = (instances.scores >= 0.5).sum().item()
+                            diag_score_filtered += (len(instances) - scores_above)
+
                         pred_arcade = self.converter.convert_instances(
                             instances,
                             image_id,
@@ -252,6 +291,18 @@ class EvalHook(HookBase):
                         )
 
                         gt_arcade = gt_data["annotations"]
+
+                        # ============ DIAGNOSTIC: Log first prediction details ============
+                        if diag_images_with_gt == 1:
+                            self.log.info(f"[DIAG] Scale factors: x={original_width/transformed_width:.3f}, y={original_height/transformed_height:.3f}")
+                            self.log.info(f"[DIAG] Original dims: {original_height}x{original_width}, Transformed: {transformed_height}x{transformed_width}")
+                            self.log.info(f"[DIAG] pred_arcade has {len(pred_arcade)} annotations after conversion")
+                            self.log.info(f"[DIAG] gt_arcade has {len(gt_arcade)} annotations")
+                            if pred_arcade:
+                                self.log.info(f"[DIAG] First pred segmentation (first 10 coords): {pred_arcade[0]['segmentation'][:10]}")
+                            if gt_arcade:
+                                seg = gt_arcade[0].get('segmentation', [])
+                                self.log.info(f"[DIAG] First GT segmentation (first 10 coords): {seg[:10] if seg else 'empty'}")
 
                         # Calculate metrics (both in original coordinate space)
                         metrics = self.metrics_calculator.calculate_metrics_for_image(
@@ -271,6 +322,10 @@ class EvalHook(HookBase):
             if torch.cuda.is_available():
                 torch.cuda.synchronize()
             total_compute_time += time.perf_counter() - start_compute_time
+
+        # ============ DIAGNOSTIC: Summary ============
+        self.log.info(f"[DIAG] Images processed: {diag_images_processed}, with GT: {diag_images_with_gt}, ID mismatches: {diag_id_mismatches}")
+        self.log.info(f"[DIAG] Raw instances total: {diag_raw_instances_total}, filtered by score: {diag_score_filtered}")
 
         # Restore original model mode
         if was_training:
