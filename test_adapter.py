@@ -21,7 +21,7 @@ def test_single_data_point_conversion():
         ],
     }
 
-    adapter = Adapter(arcade_json_input)
+    adapter = Adapter(arcade_json_input, "/tmp")
 
     result = list(adapter)
     item = result[0]
@@ -44,7 +44,8 @@ def test_mixed_segmentation_formats():
             "annotations": [
                 {"image_id": 1, "category_id": 1, "segmentation": [10, 10, 20, 20]}
             ],
-        }
+        },
+        "/tmp"
     )
     res_flat = adapter_flat._convert_annotation(adapter_flat._raw_anns[0])
     assert res_flat["bbox"] == [10, 10, 20, 20]
@@ -56,7 +57,8 @@ def test_mixed_segmentation_formats():
             "annotations": [
                 {"image_id": 1, "category_id": 1, "segmentation": [[10, 10, 20, 20]]}
             ],
-        }
+        },
+        "/tmp"
     )
     res_nested = adapter_nested._convert_annotation(adapter_nested._raw_anns[0])
     assert res_nested["bbox"] == [10, 10, 20, 20]
