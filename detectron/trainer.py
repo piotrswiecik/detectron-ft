@@ -550,7 +550,8 @@ class ArcadeOrchestrator:
         mlflow.set_tracking_uri(os.getenv("MLFLOW_TRACKING_URI"))
         mlflow.set_experiment(experiment_name)
 
-        with mlflow.start_run(run_name=f"run_epochs_{epochs}_batch_{batch}"):
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        with mlflow.start_run(run_name=f"detectron_epochs_{epochs}_batch_{batch}_dt_{timestamp}"):
             trainer = ArcadeTrainer(self.cfg)
             trainer.resume_or_load(resume=False)
 
