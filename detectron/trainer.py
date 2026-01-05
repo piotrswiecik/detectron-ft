@@ -280,13 +280,22 @@ class EvalHook(HookBase):
                             scores_above = (instances.scores >= 0.5).sum().item()
                             diag_score_filtered += (len(instances) - scores_above)
 
+                        # Detectron2 may return masks in original or transformed space
+                        # Check actual mask dimensions to determine if scaling is needed
+                        if len(instances) > 0 and instances.has("pred_masks"):
+                            mask_height = instances.pred_masks.shape[1]
+                            mask_width = instances.pred_masks.shape[2]
+                        else:
+                            mask_height = transformed_height
+                            mask_width = transformed_width
+
                         pred_arcade = self.converter.convert_instances(
                             instances,
                             image_id,
                             original_height=original_height,
                             original_width=original_width,
-                            transformed_height=transformed_height,
-                            transformed_width=transformed_width,
+                            transformed_height=mask_height,  # Use actual mask dimensions
+                            transformed_width=mask_width,    # Use actual mask dimensions
                             score_threshold=0.5
                         )
 
@@ -294,8 +303,8 @@ class EvalHook(HookBase):
 
                         # ============ DIAGNOSTIC: Log first prediction details ============
                         if diag_images_with_gt == 1:
-                            print(f"[DIAG] Scale factors: x={original_width/transformed_width:.3f}, y={original_height/transformed_height:.3f}")
-                            print(f"[DIAG] Original dims: {original_height}x{original_width}, Transformed: {transformed_height}x{transformed_width}")
+                            print(f"[DIAG] Mask dims: {mask_height}x{mask_width}, Original: {original_height}x{original_width}, Image tensor: {transformed_height}x{transformed_width}")
+                            print(f"[DIAG] Scale factors (mask->original): x={original_width/mask_width:.3f}, y={original_height/mask_height:.3f}")
                             print(f"[DIAG] pred_arcade has {len(pred_arcade)} annotations after conversion")
                             print(f"[DIAG] gt_arcade has {len(gt_arcade)} annotations")
                             if pred_arcade:
