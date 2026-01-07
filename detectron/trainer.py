@@ -439,6 +439,25 @@ class MLFlowHook(HookBase):
         except (AttributeError, Exception) as e:
             logging.getLogger(__name__).debug(f"Could not log ASPECT_RATIOS: {e}")
 
+        # Log data augmentation parameters
+        # These are currently hardcoded in custom_mapper, but we log them for tracking
+        try:
+            params["AUG.RESIZE_SHORT_EDGE_MIN"] = 640
+            params["AUG.RESIZE_SHORT_EDGE_MAX"] = 800
+            params["AUG.RESIZE_MAX_SIZE"] = 1333
+            params["AUG.RESIZE_SCALES"] = json.dumps([640, 672, 704, 736, 768, 800])
+            params["AUG.RANDOM_FLIP_PROB"] = 0.5
+            params["AUG.RANDOM_FLIP_HORIZONTAL"] = True
+            params["AUG.RANDOM_FLIP_VERTICAL"] = False
+            params["AUG.RANDOM_ROTATION_ANGLE_MIN"] = -45
+            params["AUG.RANDOM_ROTATION_ANGLE_MAX"] = 45
+            params["AUG.RANDOM_BRIGHTNESS_MIN"] = 0.8
+            params["AUG.RANDOM_BRIGHTNESS_MAX"] = 1.2
+            params["AUG.RANDOM_CONTRAST_MIN"] = 0.8
+            params["AUG.RANDOM_CONTRAST_MAX"] = 1.2
+        except Exception as e:
+            logging.getLogger(__name__).debug(f"Could not log augmentation params: {e}")
+
         mlflow.log_params(params)
 
 
