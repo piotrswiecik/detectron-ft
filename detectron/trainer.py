@@ -415,6 +415,30 @@ class MLFlowHook(HookBase):
             "MODEL.ROI_HEADS.BATCH_SIZE": cfg.MODEL.ROI_HEADS.BATCH_SIZE_PER_IMAGE,
             "DATASETS.TRAIN": str(cfg.DATASETS.TRAIN),
         }
+
+        # Log anchor-related parameters if available
+        try:
+            if hasattr(cfg.MODEL, "BACKBONE") and hasattr(cfg.MODEL.BACKBONE, "FREEZE_AT"):
+                params["MODEL.BACKBONE.FREEZE_AT"] = cfg.MODEL.BACKBONE.FREEZE_AT
+        except (AttributeError, Exception) as e:
+            logging.getLogger(__name__).debug(f"Could not log FREEZE_AT: {e}")
+
+        try:
+            if hasattr(cfg.MODEL, "ANCHOR_GENERATOR"):
+                if hasattr(cfg.MODEL.ANCHOR_GENERATOR, "SIZES"):
+                    # Convert nested list to JSON string for MLflow
+                    params["MODEL.ANCHOR_GENERATOR.SIZES"] = json.dumps(cfg.MODEL.ANCHOR_GENERATOR.SIZES)
+        except (AttributeError, Exception) as e:
+            logging.getLogger(__name__).debug(f"Could not log ANCHOR_SIZES: {e}")
+
+        try:
+            if hasattr(cfg.MODEL, "ANCHOR_GENERATOR"):
+                if hasattr(cfg.MODEL.ANCHOR_GENERATOR, "ASPECT_RATIOS"):
+                    # Convert nested list to JSON string for MLflow
+                    params["MODEL.ANCHOR_GENERATOR.ASPECT_RATIOS"] = json.dumps(cfg.MODEL.ANCHOR_GENERATOR.ASPECT_RATIOS)
+        except (AttributeError, Exception) as e:
+            logging.getLogger(__name__).debug(f"Could not log ASPECT_RATIOS: {e}")
+
         mlflow.log_params(params)
 
 
