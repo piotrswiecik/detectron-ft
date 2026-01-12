@@ -5,7 +5,6 @@ import math
 import os
 import json
 import time
-import uuid
 
 from detectron2.engine import DefaultTrainer
 from detectron2.evaluation import COCOEvaluator
@@ -93,29 +92,15 @@ def custom_mapper(dataset_dict):
 
 
 class EvalHook(HookBase):
-    """
-    Evaluation hook that computes:
-    1. Validation loss (existing)
-    2. ARCADE-format IoU and Dice metrics (new)
-
-    CRITICAL: Both evaluations happen in a SINGLE PASS through the data loader
-    to avoid DataLoader exhaustion issues.
-    """
-
     def __init__(self, cfg):
         self.cfg = cfg
         self.period = cfg.TEST.EVAL_PERIOD
         self.log = logging.getLogger(__name__)
 
-        # NOTE: We do NOT store self.data_loader here.
-        # Instead, we build a fresh one each evaluation to avoid exhaustion issues.
-
-        # Initialize ARCADE converters and metrics
         self.reverse_id_map = self._get_reverse_id_map()
         self.converter = DetectronToArcadeConverter(self.reverse_id_map)
         self.metrics_calculator = ArcadeMetricsCalculator()
 
-        # Store original ARCADE ground truth for reference
         self.arcade_ground_truth = self._load_arcade_ground_truth()
 
     def _get_reverse_id_map(self):
@@ -127,7 +112,6 @@ class EvalHook(HookBase):
         except (IndexError, KeyError):
             pass
 
-        # Fallback: identity mapping
         num_classes = self.cfg.MODEL.ROI_HEADS.NUM_CLASSES
         return {i: i for i in range(num_classes)}
 
@@ -179,7 +163,6 @@ class EvalHook(HookBase):
         This avoids the DataLoader exhaustion bug where iterating twice
         over the same DataLoader produces no results on the second pass.
         """
-        # Build fresh data loader
         data_loader = self._build_data_loader()
 
         total = len(data_loader)
@@ -188,7 +171,6 @@ class EvalHook(HookBase):
         model = self.trainer.model
         was_training = model.training
 
-        # Metrics accumulators
         losses = []
         all_ious = []
         all_dices = []
@@ -196,10 +178,8 @@ class EvalHook(HookBase):
         total_predictions = 0
         total_ground_truth = 0
 
-        # Reset converter counter for this epoch
         self.converter.reset_counter()
 
-        # ============ DIAGNOSTIC: Check ground truth loading ============
         print(f"[DIAG] arcade_ground_truth has {len(self.arcade_ground_truth)} images")
         if self.arcade_ground_truth:
             sample_key = next(iter(self.arcade_ground_truth.keys()))
@@ -210,7 +190,6 @@ class EvalHook(HookBase):
         start_time = time.perf_counter()
         total_compute_time = 0
 
-        # Diagnostic counters
         diag_images_processed = 0
         diag_images_with_gt = 0
         diag_id_mismatches = 0
@@ -227,13 +206,10 @@ class EvalHook(HookBase):
                 torch.cuda.synchronize()
 
             with torch.no_grad():
-                # ============ PHASE 1: Loss Computation ============
-                # Model must be in training mode to compute losses
                 model.train()
                 loss_dict = model(inputs)
                 losses.append(sum(loss for loss in loss_dict.values()))
 
-                # ============ PHASE 2: Inference for ARCADE Metrics ============
                 if self.arcade_ground_truth:
                     model.eval()
                     outputs = model(inputs)
@@ -242,7 +218,6 @@ class EvalHook(HookBase):
                         diag_images_processed += 1
                         image_id = input_dict["image_id"]
 
-                        # ============ DIAGNOSTIC: Log first image details ============
                         if diag_images_processed == 1:
                             print(f"[DIAG] First input image_id: {image_id} (type: {type(image_id).__name__})")
                             print(f"[DIAG] First input image shape: {input_dict['image'].shape}")
@@ -254,7 +229,6 @@ class EvalHook(HookBase):
                                     print(f"[DIAG] pred_masks shape: {instances.pred_masks.shape}")
                                     print(f"[DIAG] pred_masks dtype: {instances.pred_masks.dtype}")
 
-                        # Skip if no ground truth for this image
                         if image_id not in self.arcade_ground_truth:
                             diag_id_mismatches += 1
                             if diag_id_mismatches <= 3:
@@ -266,22 +240,16 @@ class EvalHook(HookBase):
                         original_height = gt_data["height"]
                         original_width = gt_data["width"]
 
-                        # Get transformed image dimensions from input tensor
-                        # input_dict["image"] shape is (C, H, W)
                         transformed_height = input_dict["image"].shape[1]
                         transformed_width = input_dict["image"].shape[2]
 
-                        # Convert predictions to ARCADE format with coordinate scaling
                         instances = output["instances"].to("cpu")
                         diag_raw_instances_total += len(instances)
 
-                        # Count how many get filtered by score
                         if len(instances) > 0:
                             scores_above = (instances.scores >= 0.5).sum().item()
                             diag_score_filtered += (len(instances) - scores_above)
 
-                        # Detectron2 may return masks in original or transformed space
-                        # Check actual mask dimensions to determine if scaling is needed
                         if len(instances) > 0 and instances.has("pred_masks"):
                             mask_height = instances.pred_masks.shape[1]
                             mask_width = instances.pred_masks.shape[2]
@@ -294,14 +262,13 @@ class EvalHook(HookBase):
                             image_id,
                             original_height=original_height,
                             original_width=original_width,
-                            transformed_height=mask_height,  # Use actual mask dimensions
-                            transformed_width=mask_width,    # Use actual mask dimensions
+                            transformed_height=mask_height,
+                            transformed_width=mask_width,
                             score_threshold=0.5
                         )
 
                         gt_arcade = gt_data["annotations"]
 
-                        # ============ DIAGNOSTIC: Log first prediction details ============
                         if diag_images_with_gt == 1:
                             print(f"[DIAG] Mask dims: {mask_height}x{mask_width}, Original: {original_height}x{original_width}, Image tensor: {transformed_height}x{transformed_width}")
                             print(f"[DIAG] Scale factors (mask->original): x={original_width/mask_width:.3f}, y={original_height/mask_height:.3f}")
@@ -313,7 +280,6 @@ class EvalHook(HookBase):
                                 seg = gt_arcade[0].get('segmentation', [])
                                 print(f"[DIAG] First GT segmentation (first 10 coords): {seg[:10] if seg else 'empty'}")
 
-                        # Calculate metrics (both in original coordinate space)
                         metrics = self.metrics_calculator.calculate_metrics_for_image(
                             pred_arcade,
                             gt_arcade,
@@ -332,22 +298,18 @@ class EvalHook(HookBase):
                 torch.cuda.synchronize()
             total_compute_time += time.perf_counter() - start_compute_time
 
-        # ============ DIAGNOSTIC: Summary ============
         print(f"[DIAG] Images processed: {diag_images_processed}, with GT: {diag_images_with_gt}, ID mismatches: {diag_id_mismatches}")
         print(f"[DIAG] Raw instances total: {diag_raw_instances_total}, filtered by score: {diag_score_filtered}")
 
-        # Restore original model mode
         if was_training:
             model.train()
         else:
             model.eval()
 
-        # ============ Log Loss Metrics ============
         mean_loss = torch.tensor(losses).mean().item()
         self.trainer.storage.put_scalar("validation_loss", mean_loss)
         print(f"Validation Loss: {mean_loss:.4f}")
 
-        # ============ Log ARCADE Metrics ============
         if self.arcade_ground_truth:
             mean_iou = float(np.mean(all_ious)) if all_ious else 0.0
             mean_dice = float(np.mean(all_dices)) if all_dices else 0.0
