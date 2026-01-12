@@ -17,6 +17,7 @@ from xyxy_conv import binary_mask_to_xyxy
 MODEL_CHECKPOINT = "/Users/piotrswiecik/dev/ives/coronary/trained_models/detectron/20251208_094624_lr00025_freeze0/model_final.pth"
 IMAGE_PATH = "/Users/piotrswiecik/dev/ives/coronary/datasets/arcade/syntax/val/images/1.png"
 SCORE_THRESHOLD = 0.2
+ANNOT_PATH = "/Users/piotrswiecik/dev/ives/coronary/datasets/arcade/syntax/val/annotations/val.json"
 
 
 def infer_dataset_paths(image_path):
@@ -134,6 +135,15 @@ if __name__ == "__main__":
                 continue
             pts = np.array(poly, dtype=float).reshape(-1, 2)
             axes[0, 1].plot(pts[:, 0], pts[:, 1], "-r", linewidth=1.5)
+
+    axes[1, 0].imshow(original)
+    axes[1, 0].set_title("Ground Truth Masks", fontsize=14)
+    axes[1, 0].axis("off")
+    for ann in raw_annotations:
+        seg = ann['segmentation']
+        if isinstance(seg, list):
+            pts = np.array(seg).reshape(-1, 2).astype(np.int32)
+            axes[1, 0].plot(pts[:, 0], pts[:, 1], "-g", linewidth=1.5)
 
     plt.tight_layout()
     plt.show()
