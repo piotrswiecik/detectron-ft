@@ -58,7 +58,6 @@ def infer_dataset_paths(image_path):
 
 
 def load_ground_truth(dataset_root, split, image_id):
-    """Load ground truth annotations."""
     json_path = os.path.join(dataset_root, split, "annotations", f"{split}.json")
     img_dir = os.path.join(dataset_root, split, "images")
 
@@ -137,6 +136,31 @@ def calculate_iou(mask1, mask2):
     return intersection / union
 
 
+def calculate_image_iou(conv_anns: list, mapped_gt_anns: list, image_shape: tuple) -> float:
+    combined_pred_mask = np.zeros(image_shape[:2], dtype=np.uint8)
+    combined_gt_mask = np.zeros(image_shape[:2], dtype=np.uint8)
+
+    for pred_ann in conv_anns:
+        matching_gt = [ann for ann in mapped_gt_anns if ann["category_id"] == pred_ann["class_id"]]
+        if not matching_gt:
+            continue
+
+        for poly in pred_ann["mask"]:
+            if not poly:
+                continue
+            pred_mask = polygon_to_mask(poly, image_shape)
+            combined_pred_mask = np.logical_or(combined_pred_mask, pred_mask).astype(np.uint8)
+
+        for gt_ann in matching_gt:
+            for poly in gt_ann["segmentation"]:
+                if not poly:
+                    continue
+                gt_mask = polygon_to_mask(poly, image_shape)
+                combined_gt_mask = np.logical_or(combined_gt_mask, gt_mask).astype(np.uint8)
+
+    return calculate_iou(combined_pred_mask, combined_gt_mask)
+
+
 if __name__ == "__main__":
     split, dataset_root, image_filename, image_id = infer_dataset_paths(IMAGE_PATH)
     adapter, raw_image_info, raw_annotations = load_ground_truth(dataset_root, split, image_id)
@@ -146,7 +170,6 @@ if __name__ == "__main__":
         for ann in raw_annotations
     ]
 
-    # Get mapped GT annotations from adapter (with 0-indexed category_ids matching model output)
     mapped_gt_anns: list[MappedGTAnnotation] = []
     for img_record in adapter:
         if img_record["image_id"] == image_id:
@@ -184,7 +207,6 @@ if __name__ == "__main__":
     axes[1, 0].set_title("Ground Truth Masks", fontsize=14)
     axes[1, 0].axis("off")
 
-    # Create color map for consistent colors per class
     cmap = plt.cm.get_cmap("tab10", num_classes)
     class_colors = {i: cmap(i) for i in range(num_classes)}
 
@@ -204,6 +226,12 @@ if __name__ == "__main__":
                     continue
                 pts = np.array(poly, dtype=float).reshape(-1, 2)
                 axes[1, 0].plot(pts[:, 0], pts[:, 1], "-", color=color, linewidth=1.5)
+
+    image_iou = calculate_image_iou(conv_anns, mapped_gt_anns, im.shape)
+
+    axes[1, 1].axis("off")
+    axes[1, 1].text(0.5, 0.5, f"Image IoU: {image_iou:.4f}", fontsize=20,
+                    ha="center", va="center", transform=axes[1, 1].transAxes)
 
     plt.tight_layout()
     plt.show()
