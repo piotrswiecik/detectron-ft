@@ -49,13 +49,12 @@ def infer_dataset_paths(image_path):
         split = parts[images_idx - 1]
         dataset_root = os.sep.join(parts[:images_idx - 1])
         image_filename = parts[-1]
-        image_id = int(os.path.splitext(image_filename)[0])
-        return split, dataset_root, image_filename, image_id
+        return split, dataset_root, image_filename
     except (ValueError, IndexError):
         raise ValueError(f"Cannot parse ARCADE dataset structure from path: {image_path}")
 
 
-def load_ground_truth(dataset_root, split, image_id):
+def load_ground_truth(dataset_root, split, image_filename):
     json_path = os.path.join(dataset_root, split, "annotations", f"{split}.json")
     img_dir = os.path.join(dataset_root, split, "images")
 
@@ -67,21 +66,23 @@ def load_ground_truth(dataset_root, split, image_id):
 
     adapter = Adapter(arcade_data, img_dir)
 
+    # Look up image by filename, not by ID
     raw_image_info = None
     for image in arcade_data.get("images", []):
-        if image["id"] == image_id:
+        if image["file_name"] == image_filename:
             raw_image_info = image
             break
 
     if raw_image_info is None:
-        raise ValueError(f"Image ID {image_id} not found in {json_path}")
+        raise ValueError(f"Image filename {image_filename} not found in {json_path}")
 
+    image_id = raw_image_info["id"]
     raw_annotations = [
         ann for ann in arcade_data.get("annotations", [])
         if ann["image_id"] == image_id
     ]
 
-    return adapter, raw_image_info, raw_annotations
+    return adapter, raw_image_info, raw_annotations, image_id
 
 
 def predict(im):
@@ -160,13 +161,8 @@ def calculate_image_iou(conv_anns: list, mapped_gt_anns: list, image_shape: tupl
 
 
 def visualize_single(path):
-    split, dataset_root, image_filename, image_id = infer_dataset_paths(path)
-    adapter, raw_image_info, raw_annotations = load_ground_truth(dataset_root, split, image_id)
-
-    raw_anns = [
-        ArcadeAnnotation(id=ann["id"], image_id=ann["image_id"], category_id=ann["category_id"], segmentation=ann["segmentation"])
-        for ann in raw_annotations
-    ]
+    split, dataset_root, image_filename = infer_dataset_paths(path)
+    adapter, raw_image_info, raw_annotations, image_id = load_ground_truth(dataset_root, split, image_filename)
 
     mapped_gt_anns: list[MappedGTAnnotation] = []
     for img_record in adapter:
@@ -208,22 +204,23 @@ def visualize_single(path):
     cmap = plt.cm.get_cmap("tab10", num_classes)
     class_colors = {i: cmap(i) for i in range(num_classes)}
 
+    # Draw predictions
     for coco_ann in conv_anns:
-        matching_gt = list(filter(lambda ann: ann["category_id"] == coco_ann["class_id"], mapped_gt_anns))
-        if not matching_gt:
-            continue
         color = class_colors[coco_ann["class_id"]]
         for poly in coco_ann["mask"]:
             if not poly:
                 continue
             pts = np.array(poly, dtype=float).reshape(-1, 2)
             axes[0, 1].plot(pts[:, 0], pts[:, 1], "-", color=color, linewidth=1.5)
-        for gt_ann in matching_gt:
-            for poly in gt_ann["segmentation"]:
-                if not poly:
-                    continue
-                pts = np.array(poly, dtype=float).reshape(-1, 2)
-                axes[1, 0].plot(pts[:, 0], pts[:, 1], "-", color=color, linewidth=1.5)
+
+    # Draw ground truth independently
+    for gt_ann in mapped_gt_anns:
+        color = class_colors[gt_ann["category_id"]]
+        for poly in gt_ann["segmentation"]:
+            if not poly:
+                continue
+            pts = np.array(poly, dtype=float).reshape(-1, 2)
+            axes[1, 0].plot(pts[:, 0], pts[:, 1], "-", color=color, linewidth=1.5)
 
     image_iou = calculate_image_iou(conv_anns, mapped_gt_anns, im.shape)
 
@@ -236,5 +233,5 @@ def visualize_single(path):
 
 
 if __name__ == "__main__":
-    IMAGE_PATH = "/Users/piotrswiecik/dev/ives/coronary/datasets/arcade/syntax/val/images/16.png"
+    IMAGE_PATH = "/Users/piotrswiecik/dev/ives/coronary/datasets/arcade/syntax/val/images/35.png"
     visualize_single(IMAGE_PATH)
