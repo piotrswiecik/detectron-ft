@@ -11,14 +11,12 @@ from typing import TypedDict
 from detectron2.config import get_cfg
 from detectron2.engine import DefaultPredictor
 from detectron2 import model_zoo
-from detectron2.utils.visualizer import Visualizer, ColorMode
-from detectron2.data import MetadataCatalog
 
 from dataset import Adapter
 from conv_utils import binary_mask_to_xyxy, polygon_to_mask
 
 MODEL_CHECKPOINT = "/Users/piotrswiecik/dev/ives/coronary/trained_models/detectron/20251208_094624_lr00025_freeze0/model_final.pth"
-IMAGE_PATH = "/Users/piotrswiecik/dev/ives/coronary/datasets/arcade/syntax/val/images/1.png"
+IMAGE_ROOT = "/Users/piotrswiecik/dev/ives/coronary/datasets/arcade/syntax/val/images"
 SCORE_THRESHOLD = 0.2
 ANNOT_PATH = "/Users/piotrswiecik/dev/ives/coronary/datasets/arcade/syntax/val/annotations/val.json"
 
@@ -93,7 +91,7 @@ def predict(im):
             "COCO-InstanceSegmentation/mask_rcnn_R_50_FPN_3x.yaml"
         )
     )
-    cfg.MODEL.ROI_HEADS.NUM_CLASSES = num_classes
+    cfg.MODEL.ROI_HEADS.NUM_CLASSES = 25
     cfg.MODEL.WEIGHTS = MODEL_CHECKPOINT
     cfg.MODEL.ROI_HEADS.SCORE_THRESH_TEST = 0.2
     cfg.MODEL.DEVICE = "cpu"
@@ -161,8 +159,8 @@ def calculate_image_iou(conv_anns: list, mapped_gt_anns: list, image_shape: tupl
     return calculate_iou(combined_pred_mask, combined_gt_mask)
 
 
-if __name__ == "__main__":
-    split, dataset_root, image_filename, image_id = infer_dataset_paths(IMAGE_PATH)
+def visualize_single(path):
+    split, dataset_root, image_filename, image_id = infer_dataset_paths(path)
     adapter, raw_image_info, raw_annotations = load_ground_truth(dataset_root, split, image_id)
 
     raw_anns = [
@@ -178,7 +176,7 @@ if __name__ == "__main__":
 
     num_classes = len(adapter.class_names)
 
-    im = cv2.imread(IMAGE_PATH)
+    im = cv2.imread(path)
 
     instances = predict(im)
 
@@ -235,3 +233,8 @@ if __name__ == "__main__":
 
     plt.tight_layout()
     plt.show()
+
+
+if __name__ == "__main__":
+    IMAGE_PATH = "/Users/piotrswiecik/dev/ives/coronary/datasets/arcade/syntax/val/images/16.png"
+    visualize_single(IMAGE_PATH)
