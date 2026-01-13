@@ -184,21 +184,26 @@ if __name__ == "__main__":
     axes[1, 0].set_title("Ground Truth Masks", fontsize=14)
     axes[1, 0].axis("off")
 
+    # Create color map for consistent colors per class
+    cmap = plt.cm.get_cmap("tab10", num_classes)
+    class_colors = {i: cmap(i) for i in range(num_classes)}
+
     for coco_ann in conv_anns:
         matching_gt = list(filter(lambda ann: ann["category_id"] == coco_ann["class_id"], mapped_gt_anns))
         if not matching_gt:
             continue
+        color = class_colors[coco_ann["class_id"]]
         for poly in coco_ann["mask"]:
             if not poly:
                 continue
             pts = np.array(poly, dtype=float).reshape(-1, 2)
-            axes[0, 1].plot(pts[:, 0], pts[:, 1], "-r", linewidth=1.5)
+            axes[0, 1].plot(pts[:, 0], pts[:, 1], "-", color=color, linewidth=1.5)
         for gt_ann in matching_gt:
             for poly in gt_ann["segmentation"]:
                 if not poly:
                     continue
                 pts = np.array(poly, dtype=float).reshape(-1, 2)
-                axes[1, 0].plot(pts[:, 0], pts[:, 1], "-g", linewidth=1.5)
+                axes[1, 0].plot(pts[:, 0], pts[:, 1], "-", color=color, linewidth=1.5)
 
     plt.tight_layout()
     plt.show()
