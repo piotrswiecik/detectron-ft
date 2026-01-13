@@ -204,7 +204,6 @@ def visualize_single(path):
     cmap = plt.cm.get_cmap("tab10", num_classes)
     class_colors = {i: cmap(i) for i in range(num_classes)}
 
-    # Draw predictions
     for coco_ann in conv_anns:
         color = class_colors[coco_ann["class_id"]]
         for poly in coco_ann["mask"]:
@@ -213,7 +212,6 @@ def visualize_single(path):
             pts = np.array(poly, dtype=float).reshape(-1, 2)
             axes[0, 1].plot(pts[:, 0], pts[:, 1], "-", color=color, linewidth=1.5)
 
-    # Draw ground truth independently
     for gt_ann in mapped_gt_anns:
         color = class_colors[gt_ann["category_id"]]
         for poly in gt_ann["segmentation"]:
