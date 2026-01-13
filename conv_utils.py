@@ -26,3 +26,11 @@ def binary_mask_to_xyxy(mask: torch.Tensor, epsilon: float = 0.0):
             polygons.append(poly_flat)
 
     return polygons
+
+
+def polygon_to_mask(poly, image_shape):
+    mask = np.zeros(image_shape[:2], dtype=np.uint8)
+    pts = np.array(poly).reshape(-1, 2).astype(np.int32)
+    cv2.fillPoly(mask, [pts], 1)
+    return mask
+

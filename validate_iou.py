@@ -1,9 +1,12 @@
 import os
 import json
+import typing
 
 import cv2
 import numpy as np
+import torch
 from matplotlib import pyplot as plt
+from typing import TypedDict
 
 from detectron2.config import get_cfg
 from detectron2.engine import DefaultPredictor
@@ -12,12 +15,33 @@ from detectron2.utils.visualizer import Visualizer, ColorMode
 from detectron2.data import MetadataCatalog
 
 from dataset import Adapter
-from xyxy_conv import binary_mask_to_xyxy
+from conv_utils import binary_mask_to_xyxy, polygon_to_mask
 
 MODEL_CHECKPOINT = "/Users/piotrswiecik/dev/ives/coronary/trained_models/detectron/20251208_094624_lr00025_freeze0/model_final.pth"
 IMAGE_PATH = "/Users/piotrswiecik/dev/ives/coronary/datasets/arcade/syntax/val/images/1.png"
 SCORE_THRESHOLD = 0.2
 ANNOT_PATH = "/Users/piotrswiecik/dev/ives/coronary/datasets/arcade/syntax/val/annotations/val.json"
+
+
+class ConvertedAnnotation(TypedDict):
+    class_id: int
+    confidence: float
+    mask: list[list[float]]
+    box: typing.Any
+
+
+class ArcadeAnnotation(TypedDict):
+    id: int
+    image_id: int
+    category_id: int
+    segmentation: list[list[float]]
+
+
+class MappedGTAnnotation(TypedDict):
+    bbox: list[float]
+    bbox_mode: int
+    category_id: int
+    segmentation: list[list[float]]
 
 
 def infer_dataset_paths(image_path):
@@ -105,20 +129,46 @@ def predict(im):
     return out
 
 
+def calculate_iou(mask1, mask2):
+    intersection = np.logical_and(mask1, mask2).sum()
+    union = np.logical_or(mask1, mask2).sum()
+    if union == 0:
+        return 0.0
+    return intersection / union
+
+
 if __name__ == "__main__":
     split, dataset_root, image_filename, image_id = infer_dataset_paths(IMAGE_PATH)
     adapter, raw_image_info, raw_annotations = load_ground_truth(dataset_root, split, image_id)
+
+    raw_anns = [
+        ArcadeAnnotation(id=ann["id"], image_id=ann["image_id"], category_id=ann["category_id"], segmentation=ann["segmentation"])
+        for ann in raw_annotations
+    ]
+
+    # Get mapped GT annotations from adapter (with 0-indexed category_ids matching model output)
+    mapped_gt_anns: list[MappedGTAnnotation] = []
+    for img_record in adapter:
+        if img_record["image_id"] == image_id:
+            mapped_gt_anns = img_record["annotations"]
+            break
+
     num_classes = len(adapter.class_names)
 
     im = cv2.imread(IMAGE_PATH)
 
     instances = predict(im)
 
-    poly_masks = instances["pred_masks"]
-    coco_masks = []
-    for mask in poly_masks:
+    conv_anns: list[ConvertedAnnotation] = []
+
+    for cls, score, mask, box in zip(instances["pred_classes"], instances["scores"], instances["pred_masks"], instances["pred_boxes"]):
         coco_mask = binary_mask_to_xyxy(mask)
-        coco_masks.append(coco_mask)
+        conv_anns.append({
+            "class_id": int(cls),
+            "confidence": float(score),
+            "mask": coco_mask,
+            "box": box, # TODO: convert later
+        })
 
     original = im[:, :, ::-1]
     fig, axes = plt.subplots(2, 2, figsize=(10, 10))
@@ -129,21 +179,26 @@ if __name__ == "__main__":
     axes[0, 1].imshow(original)
     axes[0, 1].set_title("Predicted Masks", fontsize=14)
     axes[0, 1].axis("off")
-    for coco_mask in coco_masks:
-        for poly in coco_mask:
-            if not poly:
-                continue
-            pts = np.array(poly, dtype=float).reshape(-1, 2)
-            axes[0, 1].plot(pts[:, 0], pts[:, 1], "-r", linewidth=1.5)
 
     axes[1, 0].imshow(original)
     axes[1, 0].set_title("Ground Truth Masks", fontsize=14)
     axes[1, 0].axis("off")
-    for ann in raw_annotations:
-        seg = ann['segmentation']
-        if isinstance(seg, list):
-            pts = np.array(seg).reshape(-1, 2).astype(np.int32)
-            axes[1, 0].plot(pts[:, 0], pts[:, 1], "-g", linewidth=1.5)
+
+    for coco_ann in conv_anns:
+        matching_gt = list(filter(lambda ann: ann["category_id"] == coco_ann["class_id"], mapped_gt_anns))
+        if not matching_gt:
+            continue
+        for poly in coco_ann["mask"]:
+            if not poly:
+                continue
+            pts = np.array(poly, dtype=float).reshape(-1, 2)
+            axes[0, 1].plot(pts[:, 0], pts[:, 1], "-r", linewidth=1.5)
+        for gt_ann in matching_gt:
+            for poly in gt_ann["segmentation"]:
+                if not poly:
+                    continue
+                pts = np.array(poly, dtype=float).reshape(-1, 2)
+                axes[1, 0].plot(pts[:, 0], pts[:, 1], "-g", linewidth=1.5)
 
     plt.tight_layout()
     plt.show()
