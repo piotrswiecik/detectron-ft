@@ -16,3 +16,5 @@ output
 
 .env
 !.env.dist
+
+*.csv

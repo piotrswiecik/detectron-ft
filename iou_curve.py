@@ -2,6 +2,7 @@ import csv
 import os
 
 import cv2
+from tqdm import tqdm
 
 from conv_utils import binary_mask_to_xyxy
 
@@ -44,13 +45,11 @@ def parse_single(path, thr):
 
 def single_pass(thr):
     ious = []
-    cnt = 0
-    for fn in os.listdir(IMAGE_ROOT):
-        if fn.endswith(".png") or fn.endswith(".jpg"):
-            cnt += 1
-            IMAGE_PATH = os.path.join(IMAGE_ROOT, fn)
-            img_iou = parse_single(IMAGE_PATH, thr=thr)
-            ious.append(img_iou)
+    image_files = [fn for fn in os.listdir(IMAGE_ROOT) if fn.endswith(".png") or fn.endswith(".jpg")]
+    for fn in tqdm(image_files, desc=f"thr={thr:.2f}", leave=False):
+        IMAGE_PATH = os.path.join(IMAGE_ROOT, fn)
+        img_iou = parse_single(IMAGE_PATH, thr=thr)
+        ious.append(img_iou)
 
     avg_iou = sum(ious) / len(ious)
     min_iou = min(ious)
@@ -74,7 +73,6 @@ if __name__ == "__main__":
 
         threshold = 0.1
         while threshold <= 0.7:
-            print(f"Processing threshold: {threshold:.2f}")
             res = single_pass(thr=threshold)
             writer.writerow(res)
             csvfile.flush()
