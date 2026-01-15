@@ -1,3 +1,4 @@
+import csv
 import os
 
 import cv2
@@ -64,5 +65,20 @@ def single_pass(thr):
 
 
 if __name__ == "__main__":
-    res = single_pass(thr=0.5)
+    output_file = "iou_curve_results.csv"
+    fieldnames = ["threshold", "average_iou", "min_iou", "max_iou"]
+
+    with open(output_file, "w", newline="") as csvfile:
+        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+        writer.writeheader()
+
+        threshold = 0.1
+        while threshold <= 0.7:
+            print(f"Processing threshold: {threshold:.2f}")
+            res = single_pass(thr=threshold)
+            writer.writerow(res)
+            csvfile.flush()
+            threshold += 0.01
+
+    print(f"Results saved to {output_file}")
 
