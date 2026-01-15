@@ -85,7 +85,7 @@ def load_ground_truth(dataset_root, split, image_filename):
     return adapter, raw_image_info, raw_annotations, image_id
 
 
-def predict(im):
+def predict(im, thr=0.2):
     cfg = get_cfg()
     cfg.merge_from_file(
         model_zoo.get_config_file(
@@ -94,7 +94,7 @@ def predict(im):
     )
     cfg.MODEL.ROI_HEADS.NUM_CLASSES = 25
     cfg.MODEL.WEIGHTS = MODEL_CHECKPOINT
-    cfg.MODEL.ROI_HEADS.SCORE_THRESH_TEST = 0.2
+    cfg.MODEL.ROI_HEADS.SCORE_THRESH_TEST = thr
     cfg.MODEL.DEVICE = "cpu"
     predictor = DefaultPredictor(cfg)
     outputs = predictor(im)
@@ -227,9 +227,20 @@ def visualize_single(path):
                     ha="center", va="center", transform=axes[1, 1].transAxes)
 
     plt.tight_layout()
-    plt.show()
+    plt.show(block=False)
+    plt.waitforbuttonpress()
+    plt.close(fig)
 
 
 if __name__ == "__main__":
-    IMAGE_PATH = "/Users/piotrswiecik/dev/ives/coronary/datasets/arcade/syntax/val/images/35.png"
-    visualize_single(IMAGE_PATH)
+    print("Press any key on the plot to advance, or close the window to quit.")
+    for fn in os.listdir(IMAGE_ROOT):
+        if fn.endswith(".png") or fn.endswith(".jpg"):
+            IMAGE_PATH = os.path.join(IMAGE_ROOT, fn)
+            print(f"Visualizing: {IMAGE_PATH}")
+            try:
+                visualize_single(IMAGE_PATH)
+            except Exception as e:
+                print(f"Error: {e}")
+                break
+
