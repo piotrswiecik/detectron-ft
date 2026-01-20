@@ -5,11 +5,13 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
+    "albumentationsx>=2.0.14",
     "mlflow>=3.7.0",
     "opencv-python>=4.12.0.88",
     "pydantic>=2.12.5",
     "python-dotenv>=1.2.1",
     "pyyaml>=6.0.3",
+    "shapely>=2.0.0",  # Required for polygon clipping in AddFrame augmentation
     "torch>=2.9.1",
     "torchvision>=0.24.1",
     "typer>=0.20.0",

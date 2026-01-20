@@ -28,6 +28,7 @@ import numpy as np
 
 from dataset import Adapter
 from converters import DetectronToArcadeConverter, ArcadeMetricsCalculator
+from detectron.augmentations import AddFrameAugmentation
 
 setup_logger()
 load_dotenv()
@@ -66,6 +67,16 @@ def custom_mapper(dataset_dict):
     dataset_dict = copy.deepcopy(dataset_dict)
     image = utils.read_image(dataset_dict["file_name"], format="BGR")
     augmentations = [
+        # AddFrame first - simulates real angiographic frames present in source images
+        # Applied before resize so frame pixels are also resized with the image
+        AddFrameAugmentation(
+            frame_width_range=(0.05, 0.15),
+            base_gray_range=(20, 50),
+            noise_scale=15.0,
+            method="random",  # randomly choose between crop and resize
+            crop_prob=0.5,
+            p=0.5,  # 50% probability of applying frame
+        ),
         T.ResizeShortestEdge(
             short_edge_length=[640, 672, 704, 736, 768, 800],
             max_size=1333,
