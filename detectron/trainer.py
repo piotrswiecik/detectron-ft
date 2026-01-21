@@ -82,7 +82,7 @@ def custom_mapper(dataset_dict):
             max_size=1333,
             sample_style="choice",
         ),
-        T.RandomFlip(prob=0.5, horizontal=True, vertical=False),
+        T.RandomFlip(prob=0.0, horizontal=True, vertical=False),
         T.RandomRotation(angle=[-45, 45]),
         T.RandomBrightness(0.8, 1.2),
         T.RandomContrast(0.8, 1.2),
